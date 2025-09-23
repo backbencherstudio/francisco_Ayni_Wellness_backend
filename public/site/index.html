@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Server Status • API</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Operational status and quick links for the backend API."
+    />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #0f172a;
+        --ink: #e5e7eb;
+        --muted: #9ba3af;
+        --brand: #5b9dff;
+        --ok: #22c55e;
+        --warn: #f59e0b;
+        --err: #ef4444;
+        --border: #1f2a44;
+        --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+        --radius: 14px;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f7fafc;
+          --panel: #ffffff;
+          --ink: #0f172a;
+          --muted: #475569;
+          --border: #e5e7eb;
+          --brand: #2563eb;
+          --shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(
+            1200px 800px at 80% -10%,
+            rgba(91, 157, 255, 0.18),
+            transparent 60%
+          ),
+          var(--bg);
+        color: var(--ink);
+        font:
+          16px/1.6 system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Inter,
+          Arial,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+      }
+      .wrap {
+        width: 100%;
+        max-width: 980px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: inherit;
+      }
+      .logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #1f3a8a, #0ea5e9);
+        box-shadow: var(--shadow);
+        color: white;
+      }
+      .brand h1 {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+        margin: 0;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.3fr 0.7fr;
+        gap: 22px;
+      }
+      @media (max-width: 900px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+      .hero {
+        padding: 28px 28px 8px;
+      }
+      .hero h2 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        letter-spacing: 0.2px;
+      }
+      .hero p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 28px 26px;
+      }
+      .badge {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .badge.ok {
+        color: var(--ok);
+        border-color: rgba(34, 197, 94, 0.35);
+      }
+      .badge.warn {
+        color: var(--warn);
+        border-color: rgba(245, 158, 11, 0.4);
+      }
+      .badge.err {
+        color: var(--err);
+        border-color: rgba(239, 68, 68, 0.4);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .links {
+        padding: 22px 24px;
+        display: grid;
+        gap: 12px;
+      }
+      .link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        text-decoration: none;
+        color: inherit;
+        transition:
+          transform 0.15s ease,
+          background 0.15s ease;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.02),
+          rgba(0, 0, 0, 0.02)
+        );
+      }
+      .link:hover {
+        transform: translateY(-1px);
+        background: rgba(91, 157, 255, 0.08);
+      }
+      .link small {
+        color: var(--muted);
+      }
+      .pill {
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgba(91, 157, 255, 0.12);
+        color: var(--brand);
+        border: 1px solid rgba(91, 157, 255, 0.25);
+      }
+      .aside {
+        padding: 18px;
+        display: grid;
+        gap: 14px;
+      }
+      .kvs {
+        display: grid;
+        gap: 8px;
+      }
+      .kv {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px dashed var(--border);
+        border-radius: 10px;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      pre {
+        margin: 0;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+        overflow: auto;
+      }
+      footer {
+        margin-top: 18px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .cta {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--ink);
+        padding: 10px 14px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition:
+          background 0.15s ease,
+          transform 0.12s ease;
+      }
+      .cta:hover {
+        background: rgba(255, 255, 255, 0.04);
+        transform: translateY(-1px);
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--warn);
+        box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.08);
+      }
+      .dot.ok {
+        background: var(--ok);
+        box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.12);
+      }
+      .dot.err {
+        background: var(--err);
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <a class="brand" href="/">
+          <div class="logo" aria-hidden="true">
+            <!-- minimalist spark logo -->
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 2l2.6 6.9L22 10l-6.5 4.6L17.3 22 12 17.9 6.7 22l1.8-7.4L2 10l7.4-1.1L12 2z"
+                fill="white"
+                opacity=".9"
+              />
+            </svg>
+          </div>
+          <h1 id="brandTitle">Backend API</h1>
+        </a>
+        <button id="refreshBtn" class="cta" title="Refresh status">
+          <span id="dot" class="dot"></span>
+          Refresh
+        </button>
+      </header>
+
+      <main class="grid">
+        <!-- Left: Hero + Links -->
+        <section class="card">
+          <div class="hero">
+            <h2>{project name} Server is running here</h2>
+            <p class="muted">
+              Welcome! Use the quick links below or hit the API root. This page
+              auto-checks backend status.
+            </p>
+          </div>
+          <div class="status">
+            <span id="statusBadge" class="badge warn">Checking…</span>
+            <div style="flex: 1">
+              <div class="muted" style="font-size: 14px">
+                <strong>Endpoint:</strong> <code id="endpoint">/api</code>
+              </div>
+              <div style="margin-top: 6px">
+                <pre id="result">Waiting for response…</pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="links">
+            <a class="link" href="/api/docs">
+              <div>
+                <div><strong>API Documentation</strong></div>
+                <small>OpenAPI (Swagger UI)</small>
+              </div>
+              <span class="pill">/api/docs</span>
+            </a>
+
+            <a class="link" href="/api">
+              <div>
+                <div><strong>API Root</strong></div>
+                <small>Environment & simple health</small>
+              </div>
+              <span class="pill">/api</span>
+            </a>
+
+            <a class="link" href="/public">
+              <div>
+                <div><strong>Public Files</strong></div>
+                <small>Static assets served by Nest</small>
+              </div>
+              <span class="pill">/public</span>
+            </a>
+
+            <a class="link" href="/storage">
+              <div>
+                <div><strong>Storage</strong></div>
+                <small>Uploaded files (if enabled)</small>
+              </div>
+              <span class="pill">/storage</span>
+            </a>
+          </div>
+        </section>
+
+        <!-- Right: Facts -->
+        <aside class="card aside">
+          <div class="kvs">
+            <div class="kv"><span>Host</span> <code id="host">—</code></div>
+            <div class="kv"><span>Time</span> <code id="time">—</code></div>
+            <div class="kv"><span>Uptime</span> <code id="uptime">—</code></div>
+            <div class="kv">
+              <span>Version</span> <code id="version">—</code>
+            </div>
+            <div class="kv">
+              <span>Environment</span> <code id="env">—</code>
+            </div>
+          </div>
+          <div class="muted" style="font-size: 12px">
+            Tip: If <code>/api</code> returns 404, it’s likely because your
+            routes are prefixed by
+            <code>app.setGlobalPrefix('api')</code> (which is expected).
+          </div>
+        </aside>
+      </main>
+
+      <footer>
+        <span id="footerText">© <span id="year"></span> Backend API</span>
+      </footer>
+    </div>
+
+    <script>
+      // util: safe JSON parse
+      const tryJson = (t) => {
+        try {
+          return JSON.parse(t);
+        } catch {
+          return t;
+        }
+      };
+
+      function setStatus(state, payload) {
+        const badge = document.getElementById('statusBadge');
+        const dot = document.getElementById('dot');
+        if (state === 'ok') {
+          badge.className = 'badge ok';
+          badge.textContent = 'Online';
+          dot.className = 'dot ok';
+        } else if (state === 'warn') {
+          badge.className = 'badge warn';
+          badge.textContent = 'Degraded';
+          dot.className = 'dot';
+        } else {
+          badge.className = 'badge err';
+          badge.textContent = 'Offline';
+          dot.className = 'dot err';
+        }
+        const resEl = document.getElementById('result');
+        if (typeof payload === 'string') resEl.textContent = payload;
+        else resEl.textContent = JSON.stringify(payload, null, 2);
+      }
+
+      async function fetchWithTimeout(url, opts = {}, ms = 6000) {
+        const ctrl = new AbortController();
+        const id = setTimeout(() => ctrl.abort(), ms);
+        try {
+          const res = await fetch(url, {
+            ...opts,
+            signal: ctrl.signal,
+            headers: { Accept: 'application/json' },
+          });
+          const text = await res.text();
+          return { status: res.status, body: tryJson(text) };
+        } finally {
+          clearTimeout(id);
+        }
+      }
+
+      async function check() {
+        const endpoint = '/api';
+        document.getElementById('endpoint').textContent = endpoint;
+        try {
+          const { status, body } = await fetchWithTimeout(endpoint);
+          // derive fields if present
+          const host = location.host;
+          const now = new Date();
+          document.getElementById('host').textContent = host;
+          document.getElementById('time').textContent = now.toLocaleString();
+          const version =
+            (body && body.version) ||
+            (body && body.data && body.data.version) ||
+            '—';
+          const env =
+            (body && body.env) ||
+            (body && body.data && body.data.env) ||
+            (body && body.message && body.message.env) ||
+            (body && body.message && body.message.environment) ||
+            '—';
+          const uptime =
+            body && body.uptimeSec != null ? body.uptimeSec + 's' : '—';
+          document.getElementById('version').textContent = version;
+          document.getElementById('env').textContent = env;
+          document.getElementById('uptime').textContent = uptime;
+
+          if (status >= 200 && status < 400) {
+            setStatus('ok', body ?? 'OK');
+          } else if (status >= 400 && status < 500) {
+            setStatus('warn', body);
+          } else {
+            setStatus('err', body);
+          }
+        } catch (e) {
+          setStatus('err', e?.message || String(e));
+        }
+      }
+
+      // set titles & footer
+      const appName = (document.title.split('•')[0] || 'Backend API').trim();
+      document.getElementById('brandTitle').textContent = appName;
+      document.getElementById('year').textContent = new Date().getFullYear();
+      document.getElementById('footerText').firstChild &&
+        (document.getElementById('footerText').firstChild.textContent =
+          `© ${new Date().getFullYear()} ${appName} `);
+
+      document.getElementById('refreshBtn').addEventListener('click', check);
+      // initial run
+      check();
+    </script>
+  </body>
+</html>

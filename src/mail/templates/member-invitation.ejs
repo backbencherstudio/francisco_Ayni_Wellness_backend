@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitation to Join <%= process.env.APP_NAME %></title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    .email-container {
+      background-color: #ffffff;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .email-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .email-header h1 {
+      color: #3498db;
+      font-size: 24px;
+    }
+    .email-body {
+      line-height: 1.6;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    .email-body p {
+      margin-bottom: 15px;
+    }
+    .email-body a {
+      background-color: #3498db;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 5px;
+      text-decoration: none;
+      font-weight: bold;
+      display: inline-block;
+      margin-top: 10px;
+    }
+    .email-footer {
+      text-align: center;
+      font-size: 12px;
+      color: #777;
+      margin-top: 30px;
+    }
+    .email-footer p {
+      margin: 5px 0;
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid #e0e0e0;
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1>Invitation to Join <%= process.env.APP_NAME %></h1>
+    </div>
+    <div class="email-body">
+      <p>Hey <%= member.fname %>,</p>
+      <p>You have been invited by <%= user.fname %> <%= user.lname %> (<%= user.email %>) to join <%= process.env.APP_NAME %>.</p>
+      <p><%= process.env.APP_NAME %> lets you manage all your customer conversations conveniently from one place while collaborating with your team.</p>
+      <p>To get started, please accept the invitation by clicking the button below:</p>
+      <a href="<%= url %>">Accept Invitation</a>
+    </div>
+    <div class="email-footer">
+      <p>Regards,</p>
+      <p><strong><%= process.env.APP_NAME %></strong></p>
+      <hr />
+      <p>If you're having trouble clicking the "Accept Invitation" button, copy and paste the URL below into your web browser:</p>
+      <p><%= url %></p>
+    </div>
+  </div>
+</body>
+</html>
