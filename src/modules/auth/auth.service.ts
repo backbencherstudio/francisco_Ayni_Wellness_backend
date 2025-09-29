@@ -42,6 +42,7 @@ export class AuthService {
           gender: true,
           date_of_birth: true,
           created_at: true,
+          subscriptions: { select: { id: true, status: true, end_date: true } },
         },
       });
 
@@ -239,6 +240,40 @@ export class AuthService {
         60 * 60 * 24 * 7, // 7 days in seconds
       );
 
+      // Check active subscription
+      const [activeSubscription, activeTrial, anyTrial] = await Promise.all([
+        this.prisma.subscription.findFirst({
+          where: {
+            user_id: user.id,
+            status: 'active',
+            OR: [{ end_date: null }, { end_date: { gt: new Date() } }],
+            NOT: { plan_name: 'trial' },
+          },
+        }),
+        this.prisma.subscription.findFirst({
+          where: {
+            user_id: user.id,
+            status: 'active',
+            plan_name: 'trial',
+            end_date: { gt: new Date() },
+          },
+        }),
+        this.prisma.subscription.findFirst({
+          where: { user_id: user.id, plan_name: 'trial' },
+          select: { id: true },
+        }),
+      ]);
+
+      const trial_active = !!activeTrial;
+      const trial_ends_at = activeTrial?.end_date?.toISOString();
+      const trial_days_remaining = trial_active
+        ? Math.ceil(
+            (activeTrial!.end_date!.getTime() - Date.now()) /
+              (1000 * 60 * 60 * 24),
+          )
+        : 0;
+      const trial_available = !trial_active && !activeSubscription && !anyTrial;
+
       return {
         success: true,
         message: 'Logged in successfully',
@@ -248,6 +283,14 @@ export class AuthService {
           refresh_token: refreshToken,
         },
         type: user.type,
+        subscription_active: !!activeSubscription,
+        subscription_required: !activeSubscription && !trial_active,
+        redirect:
+          !activeSubscription && !trial_active ? '/subscription' : undefined,
+        trial_active,
+        trial_days_remaining,
+        trial_ends_at,
+        trial_available,
       };
     } catch (error) {
       return {
@@ -326,19 +369,19 @@ export class AuthService {
   }
 
   async register({
-    name,
     first_name,
     last_name,
     email,
     password,
     type,
+    agree_to_terms,
   }: {
-    name: string;
     first_name: string;
     last_name: string;
     email: string;
     password: string;
     type?: string;
+    agree_to_terms?: boolean;
   }) {
     try {
       // Check if email already exist
@@ -354,6 +397,18 @@ export class AuthService {
         };
       }
 
+      const name = first_name && last_name ? first_name + ' ' + last_name : '';
+
+      // if agreed to terms and policy = toggle this button
+      const isAgreedToTermsAndPolicy = agree_to_terms === true;
+
+      if (!isAgreedToTermsAndPolicy) {
+        return {
+          statusCode: 401,
+          message: 'You must agree to the terms and policy',
+        };
+      }
+
       const user = await UserRepository.createUser({
         name: name,
         first_name: first_name,
@@ -361,9 +416,10 @@ export class AuthService {
         email: email,
         password: password,
         type: type,
+        agree_to_terms: isAgreedToTermsAndPolicy,
       });
 
-      if (user == null && user.success == false) {
+      if (!user || user.success === false) {
         return {
           success: false,
           message: 'Failed to create account',
@@ -388,27 +444,6 @@ export class AuthService {
         });
       }
 
-      // ----------------------------------------------------
-      // // create otp code
-      // const token = await UcodeRepository.createToken({
-      //   userId: user.data.id,
-      //   isOtp: true,
-      // });
-
-      // // send otp code to email
-      // await this.mailService.sendOtpCodeToEmail({
-      //   email: email,
-      //   name: name,
-      //   otp: token,
-      // });
-
-      // return {
-      //   success: true,
-      //   message: 'We have sent an OTP code to your email',
-      // };
-
-      // ----------------------------------------------------
-
       // Generate verification token
       const token = await UcodeRepository.createVerificationToken({
         userId: user.data.id,
@@ -423,9 +458,17 @@ export class AuthService {
         type: type,
       });
 
+      // New users will not have subscription yet; signal requirement
       return {
         success: true,
         message: 'We have sent a verification link to your email',
+        subscription_active: false,
+        subscription_required: true,
+        redirect: '/subscription',
+        trial_active: false,
+        trial_days_remaining: 0,
+        trial_ends_at: null,
+        trial_available: true,
       };
     } catch (error) {
       return {

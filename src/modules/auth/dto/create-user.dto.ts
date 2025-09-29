@@ -1,11 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, MinLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, MinLength } from 'class-validator';
 
 export class CreateUserDto {
-  @IsNotEmpty()
-  @ApiProperty()
-  name?: string;
-
   @IsNotEmpty()
   @ApiProperty()
   first_name?: string;
@@ -28,4 +24,13 @@ export class CreateUserDto {
     example: 'user',
   })
   type?: string;
+
+  @ApiProperty({
+    type: Boolean,
+    example: true,
+    description:
+      'Set to true if the user agrees to the Terms and Privacy Policy. Registration requires this to be true.',
+  })
+  @IsBoolean({ message: 'agree_to_terms must be a boolean' })
+  agree_to_terms?: boolean;
 }
