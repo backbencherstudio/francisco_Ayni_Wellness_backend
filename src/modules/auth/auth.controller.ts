@@ -13,6 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipSubscription } from '../../common/decorator/skip-subscription.decorator';
 import { Request, Response } from 'express';
 import { memoryStorage } from 'multer';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -27,6 +28,7 @@ import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('auth')
 @Controller('auth')
+@SkipSubscription() 
 export class AuthController {
   constructor(private authService: AuthService) {}
 
@@ -54,16 +56,13 @@ export class AuthController {
   @Post('register')
   async create(@Body() data: CreateUserDto, @Req() req: Request) {
     try {
-      const name = data.name;
       const first_name = data.first_name;
       const last_name = data.last_name;
       const email = data.email;
       const password = data.password;
       const type = data.type;
+      const agree_to_terms = data.agree_to_terms;
 
-      if (!name) {
-        throw new HttpException('Name not provided', HttpStatus.UNAUTHORIZED);
-      }
       if (!first_name) {
         throw new HttpException(
           'First name not provided',
@@ -86,13 +85,20 @@ export class AuthController {
         );
       }
 
+      if (agree_to_terms !== true) {
+        throw new HttpException(
+          'You must agree to the terms and policy',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
       const response = await this.authService.register({
-        name: name,
         first_name: first_name,
         last_name: last_name,
         email: email,
         password: password,
         type: type,
+        agree_to_terms: agree_to_terms,
       });
 
       return response;
@@ -221,10 +227,6 @@ export class AuthController {
     try {
       const user_id = req.user.userId;
       const response = await this.authService.updateUser(user_id, data, image);
-      console.log('user_id', user_id);
-      console.log('data', data);
-      console.log('image', image);
-      console.log('response', response);
       return response;
     } catch (error) {
       return {

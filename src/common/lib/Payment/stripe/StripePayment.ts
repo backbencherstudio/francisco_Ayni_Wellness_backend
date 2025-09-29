@@ -460,4 +460,13 @@ export class StripePayment {
     );
     return event;
   }
+
+  // -------- Additional helpers for subscription workflow --------
+  static async retrieveSubscription(id: string) {
+    return Stripe.subscriptions.retrieve(id);
+  }
+
+  static async retrievePaymentMethod(id: string) {
+    return Stripe.paymentMethods.retrieve(id);
+  }
 }

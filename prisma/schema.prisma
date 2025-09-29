@@ -62,11 +62,17 @@ model User {
   // billing id. e.g. stripe customer id
   billing_id String?
 
+  IsSubscriptionActive Boolean? @default(false)
+
   type              String?   @default("user")
   email_verified_at DateTime?
 
+  user_type UserType? @default(Normal)
+
   is_two_factor_enabled Int?    @default(0)
   two_factor_secret     String? // secret key for two factor authentication
+
+  agree_to_terms Boolean? @default(false)
 
   accounts                  Account[]
   creator_conversations     Conversation[] @relation("creator")
@@ -82,8 +88,20 @@ model User {
   roles                Role[]
   role_users           RoleUser[]
   payment_transactions PaymentTransaction[]
+  subscriptions        Subscription[]
+  Habit                Habit[]
+  Mood                 Mood[]
+  statistics           Statistics[]
+  Reminders            Reminders[]
+  Inspiration          Inspiration[]
 
   @@map("users")
+}
+
+enum UserType {
+  Premium
+  Trial
+  Normal
 }
 
 model Ucode {
@@ -220,6 +238,17 @@ model UserPaymentMethod {
 
   payment_method_id String?
   checkout_id       String?
+  // Added detailed card / wallet metadata for displaying in subscription screens
+  brand             String? // e.g. visa, mastercard
+  last4             String? // last 4 digits
+  exp_month         Int?
+  exp_year          Int?
+  funding           String? // credit, debit, prepaid
+  method_type       String? // card | wallet | bank
+  is_default        Boolean? @default(false)
+
+  // reverse relation: a payment method can have many subscriptions over time
+  subscriptions Subscription[]
 
   @@map("user_payment_methods")
 }
@@ -248,6 +277,211 @@ model PaymentTransaction {
   paid_currency    String?
 
   @@map("payment_transactions")
+}
+
+// Subscription model
+
+model Subscription {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  plan_name   String?
+  description String?
+  plan_id     String?
+  price       Decimal?
+  currency    String?
+  interval    String? // e.g. month, year
+
+  status                 String?            @default("active")
+  start_date             DateTime?
+  end_date               DateTime?
+  cancel_at_end          Boolean?           @default(false)
+  canceled_at            DateTime?
+  trial_start            DateTime?
+  trial_end              DateTime?
+  subscription_id        String? // e.g. stripe subscription id
+  next_billing_date      DateTime? // mirrors Stripe current_period_end for display
+  // Linked payment method snapshot (denormalized for historical accuracy)
+  payment_method_id      String? // stripe payment_method id
+  payment_method_brand   String?
+  payment_method_last4   String?
+  payment_method_funding String?
+  payment_method_type    String? // card | wallet
+  user_payment_method_id String? // relation to stored payment method
+  user_payment_method    UserPaymentMethod? @relation(fields: [user_payment_method_id], references: [id])
+
+  @@unique([subscription_id])
+  @@map("subscriptions")
+}
+
+model Habit {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status      Int?           @default(1) @db.SmallInt
+  habit_name  String?
+  description String?
+  category    HabitCategory?
+
+  frequency Frequency?
+
+  preferred_time PreferredTime?
+  reminder_time  String?
+  duration       Int? // in minutes
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  statistics Statistics[] @relation("HabitStatistics")
+  Reminders  Reminders[]
+
+  @@map("habits")
+}
+
+enum HabitCategory {
+  Meditation
+  Gratitude
+  Breathing
+  Journaling
+  Movement
+  Reading
+}
+
+enum Frequency {
+  Daily
+  Weekly
+  Weekdays
+  Weekends
+}
+
+enum PreferredTime {
+  Morning   @map("Morning (6-10am)")
+  Afternoon @map("Afternoon (10am-2pm)")
+  Evening   @map("Evening (2pm-6pm)")
+  Night     @map("Night (6pm-10pm)")
+}
+
+model Reminders {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  status     Int?     @default(1) @db.SmallInt
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  habit_id String?
+  habit    Habit?  @relation(fields: [habit_id], references: [id])
+
+  name   String?
+  time   String?
+  days   String? // e.g. "Mon,Tue,Wed"
+  active Boolean? @default(true)
+
+  @@map("reminders")
+}
+
+model Mood {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status Int?    @default(1) @db.SmallInt
+  mood   String?
+  note   String?
+
+  rate_overall_mood   Int?      @default(0)
+  emotion             Emotions?
+  Additional_thoughts String?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  statistics_id String?
+  statistics    Statistics? @relation("MoodStatistics", fields: [statistics_id], references: [id])
+
+  @@map("moods")
+}
+
+enum Emotions {
+  Peaceful
+  Grateful
+  Energetic
+  Focused
+  Calm
+  Hopeful
+  Anxious
+  Tired
+  Stressed
+  OverWhelmed
+  Sad
+  Frustrated
+  Excited
+  Creative
+  Motivated
+  Relexed
+  Inspired
+  Content
+  Happy
+  Angry
+  Lonely
+}
+
+model Statistics {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  date       DateTime?
+  habits     Habit[]   @relation("HabitStatistics")
+  moods      Mood[]    @relation("MoodStatistics")
+  mood_count Int?      @default(0)
+
+  current_streak   Int?   @default(0)
+  completion_rate  Float? @default(0.0)
+  total_time_spent Int?   @default(0) // in minutes
+  average_mood     Float? @default(0.0)
+
+  achievements Json[] @default([])
+
+  @@map("statistics")
+}
+
+model Inspiration {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status Int?    @default(1) @db.SmallInt
+  quote  String?
+  author String?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  keyword InspirationKeyword?
+
+  @@map("inspirations")
+}
+
+enum InspirationKeyword {
+  Peace
+  Love
+  Mindfulness
+  Gratitude
 }
 
 // ---------Start Chat schema---------
@@ -352,19 +586,21 @@ model Contact {
   @@map("contacts")
 }
 
-model SocialMedia {
+model Setting {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  status     Int?    @default(1) @db.SmallInt
-  sort_order Int?    @default(0)
-  name       String?
-  url        String?
-  icon       String?
+  category      String?
+  label         String?
+  description   String?
+  key           String? @unique
+  default_value String?
 
-  @@map("social_medias")
+  user_settings UserSetting[]
+
+  @@map("settings")
 }
 
 model WebsiteInfo {
@@ -385,23 +621,6 @@ model WebsiteInfo {
   @@map("website_infos")
 }
 
-model Setting {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
-  deleted_at DateTime?
-
-  category      String?
-  label         String?
-  description   String?
-  key           String? @unique
-  default_value String?
-
-  user_settings UserSetting[]
-
-  @@map("settings")
-}
-
 model UserSetting {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
@@ -418,19 +637,3 @@ model UserSetting {
 
   @@map("user_settings")
 }
-
-// this table stores example
-// model Note {
-//   id                String  @id @default(cuid())
-//   created_at DateTime  @default(now())
-//   updated_at DateTime  @default(now())
-//   deleted_at DateTime?
-//   status     Int?      @default(1) @db.SmallInt
-
-//   title String?
-//   body  String? @db.Text
-
-//   tenant_id Int?
-//   tenant    Organization? @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-//   @@map("posts")
-// }

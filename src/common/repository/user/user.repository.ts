@@ -198,6 +198,7 @@ export class UserRepository {
     phone_number,
     role_id = null,
     type = 'user',
+    agree_to_terms,
   }: {
     name?: string;
     first_name?: string;
@@ -207,6 +208,7 @@ export class UserRepository {
     phone_number?: string;
     role_id?: string;
     type?: string;
+    agree_to_terms?: boolean;
   }) {
     try {
       const data = {};
@@ -251,6 +253,17 @@ export class UserRepository {
         // if (type == Role.VENDOR) {
         //   data['approved_at'] = DateHelper.now();
         // }
+      }
+
+      // if agreed to terms and policy = toggle this button
+      const isAgreedToTermsAndPolicy = agree_to_terms === true;
+      data['agree_to_terms'] = isAgreedToTermsAndPolicy;
+
+      if (!isAgreedToTermsAndPolicy) {
+        return {
+          success: false,
+          message: 'You must agree to the terms and privacy policy',
+        };
       }
 
       const user = await prisma.user.create({
