@@ -1,41 +1,40 @@
 // external imports
-import {
-  Logger,
-  Injectable,
-  OnModuleInit,
-  OnModuleDestroy,
-} from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
-// internal imports
-import { SoftdeleteMiddleware } from './middleware/softdelete.middleware';
+import { Logger, Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import prismaSingleton from './prisma.singleton';
 
 @Injectable()
-export class PrismaService
-  extends PrismaClient<Prisma.PrismaClientOptions, 'query'>
-  implements OnModuleInit, OnModuleDestroy
-{
+export class PrismaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
+  // expose the prisma client instance
+  public readonly $: typeof prismaSingleton = prismaSingleton as any;
+  // For backwards compatibility where code expects 'this' to be a PrismaClient
+  // we proxy selected methods
+  get user() { return prismaSingleton.user; }
+  get role() { return prismaSingleton.role; }
+  get paymentTransaction() { return prismaSingleton.paymentTransaction; }
+  get subscription() { return prismaSingleton.subscription; }
+  // Add other frequently used models as needed or fallback via [key]
+  [key: string]: any;
+
   constructor() {
-    super({ log: [{ emit: 'event', level: 'query' }] });
-
-    // this.logger.log(`Prisma v${Prisma.prismaVersion.client}`);
-    // this.$on('query', (e) => this.logger.debug(`${e.query} ${e.params}`));
-
-    // comment out this when seeding data using command line
-    if (process.env.PRISMA_ENV == '1') {
-      console.log('Prisma Middleware not called', process.env.PRISMA_ENV);
-    } else {
-      // use middleware here
-      this.$use(SoftdeleteMiddleware);
-    }
+    // Fallback proxy for any model not explicitly added
+    return new Proxy(this, {
+      get(target, prop, receiver) {
+        if (Reflect.has(target, prop)) return Reflect.get(target, prop, receiver);
+        const val = (prismaSingleton as any)[prop as any];
+        if (typeof val === 'function') return val.bind(prismaSingleton);
+        return val;
+      },
+    });
   }
 
   async onModuleInit() {
-    await this.$connect();
+    await prismaSingleton.$connect();
   }
 
   async onModuleDestroy() {
-    await this.$disconnect();
+    await prismaSingleton.$disconnect();
   }
 }

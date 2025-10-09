@@ -35,9 +35,6 @@ model User {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now())
-  deleted_at DateTime?
-  status     Int?      @default(1) @db.SmallInt
-
   approved_at  DateTime?
   availability String?
 
@@ -94,6 +91,10 @@ model User {
   statistics           Statistics[]
   Reminders            Reminders[]
   Inspiration          Inspiration[]
+  mood_entries         MoodEntry[]
+  mood_daily_aggregates MoodDailyAggregate[]
+  habit_logs            HabitLog[]
+  support_tickets       SupportTicket[]
 
   @@map("users")
 }
@@ -108,7 +109,6 @@ model Ucode {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
-  status     Int?     @default(1) @db.SmallInt
 
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id])
@@ -124,7 +124,6 @@ model Role {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now())
-  deleted_at DateTime?
 
   status Int?    @default(1) @db.SmallInt
   title  String?
@@ -339,19 +338,18 @@ model Habit {
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  statistics Statistics[] @relation("HabitStatistics")
-  Reminders  Reminders[]
+    statistics Statistics[] @relation("HabitStatistics")
+    Reminders  Reminders[]
+    logs       HabitLog[]
 
   @@map("habits")
 }
 
 enum HabitCategory {
   Meditation
-  Gratitude
-  Breathing
+  SoundHealing @map("Sound healing")
   Journaling
-  Movement
-  Reading
+  Podcast
 }
 
 enum Frequency {
@@ -372,7 +370,6 @@ model Reminders {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
-  status     Int?     @default(1) @db.SmallInt
 
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id])
@@ -388,11 +385,32 @@ model Reminders {
   @@map("reminders")
 }
 
+// Logs each time a user completes a habit (one per habit per day by default)
+model HabitLog {
+  id            String   @id @default(cuid())
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now())
+  user_id       String
+  habit_id      String
+  day           DateTime // UTC day bucket (startOfDay UTC)
+  completed_at  DateTime @default(now())
+  duration_minutes Int?
+  note          String?  @db.VarChar(500)
+
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  habit Habit @relation(fields: [habit_id], references: [id], onDelete: Cascade)
+  // (Removed direct Reminders relation for simplicity; can be reinstated if needed.)
+
+  @@unique([habit_id, day])
+  @@index([user_id, day])
+  @@index([habit_id, day])
+  @@map("habit_logs")
+}
+
 model Mood {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now())
-  deleted_at DateTime?
 
   status Int?    @default(1) @db.SmallInt
   mood   String?
@@ -475,6 +493,56 @@ model Inspiration {
   keyword InspirationKeyword?
 
   @@map("inspirations")
+}
+
+// ================= Mood Tracking (new implementation) =================
+
+model MoodEntry {
+  id              String    @id @default(cuid())
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now())
+  deleted_at      DateTime?
+
+  user_id String
+  user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  score   Int      // 1-10 overall mood rating
+  emotions String[] 
+  note    String?   @db.VarChar(1000)
+
+  // AI enrichment (optional)
+  ai_summary     String?   @db.VarChar(300)
+  ai_suggestions String?   
+  ai_model       String?
+  ai_tokens_in   Int?
+  ai_tokens_out  Int?
+  ai_error       String?
+
+  sentiment_score Float?    
+  energy_score    Float?
+
+  @@index([user_id, created_at])
+  @@map("mood_entries")
+}
+
+model MoodDailyAggregate {
+  id            String    @id @default(cuid())
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now())
+  user_id String
+  user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  date        DateTime    // UTC midnight representing user's local date bucket
+  count_entries Int       @default(0)
+  avg_score     Float     @default(0)
+  min_score     Int       @default(0)
+  max_score     Int       @default(0)
+  emotions_top  String[]
+  last_entry_id String?
+
+  @@unique([user_id, date])
+  @@index([user_id, date])
+  @@map("mood_daily_aggregates")
 }
 
 enum InspirationKeyword {
@@ -584,6 +652,28 @@ model Contact {
   message      String?
 
   @@map("contacts")
+}
+
+// Support tickets submitted by users (in-app contact support)
+model SupportTicket {
+  id          String   @id @default(cuid())
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+  user_id     String?
+  user        User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  email       String?
+  description String
+  status      SupportTicketStatus @default(OPEN)
+  resolved_at DateTime?
+
+  @@index([user_id])
+  @@map("support_tickets")
+}
+
+enum SupportTicketStatus {
+  OPEN
+  CLOSED
+  RESOLVED
 }
 
 model Setting {

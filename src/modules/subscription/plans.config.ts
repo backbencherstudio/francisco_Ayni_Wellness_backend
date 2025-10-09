@@ -17,7 +17,7 @@ export const PLANS: PlanDefinition[] = [
     price: 0,
     currency: 'usd',
     stripePriceId: process.env.STRIPE_PRICE_TRIAL,
-    trialDays: 30,
+    trialDays: Number(process.env.TRIAL_DAYS) || 30,
     features: [
       'AI-Driven Personalized Routines',
       'Guided Access to Content',

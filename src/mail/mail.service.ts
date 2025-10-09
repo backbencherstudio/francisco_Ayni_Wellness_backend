@@ -78,4 +78,47 @@ export class MailService {
       console.log(error);
     }
   }
+
+  async sendSupportEmail(params: { to: string; userName: string; userEmail?: string; description: string; ticketId: string; submittedAt?: Date; dashboardUrl?: string }) {
+    try {
+      const subject = `Support Request #${params.ticketId}`;
+      const submittedAt = params.submittedAt || new Date();
+      await this.queue.add('sendSupportEmail', {
+        to: params.to,
+        subject,
+        template: 'support-request.ejs',
+        context: {
+          appName: appConfig().app.name,
+          userName: params.userName,
+            userEmail: params.userEmail,
+          description: params.description,
+          ticketId: params.ticketId,
+          submittedAt: submittedAt.toISOString(),
+          dashboardUrl: params.dashboardUrl,
+        },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async sendFeedbackEmail(params: { to: string; userName: string; userEmail: string; feedback: string }) {
+    try {
+      const subject = `Feedback from ${params.userName}`;
+      await this.queue.add('sendFeedbackEmail', {
+        to: params.to,
+        subject,
+        template: 'feedback.ejs',
+        context: {
+          appName: appConfig().app.name,
+          userName: params.userName,
+          userEmail: params.userEmail,
+          feedback: params.feedback,
+        },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
 }

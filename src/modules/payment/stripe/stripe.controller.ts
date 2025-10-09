@@ -5,6 +5,8 @@ import { Request } from 'express';
 import { TransactionRepository } from '../../../common/repository/transaction/transaction.repository';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { StripePayment } from '../../../common/lib/Payment/stripe/StripePayment';
+import { AppSubscriptionService } from '../../subscription/subscription.service';
+// This controller is now subscription/payment (Stripe) only; order purchase flow removed.
 
 @Controller('payment/stripe')
 @SkipSubscription()
@@ -12,6 +14,7 @@ export class StripeController {
   constructor(
     private readonly stripeService: StripeService,
     private prisma: PrismaService,
+    private subService: AppSubscriptionService,
   ) {}
 
   @Post('webhook')
@@ -20,9 +23,42 @@ export class StripeController {
     @Req() req: Request,
   ) {
     try {
-      console.log('Webhook received:', req.rawBody, signature); 
-      const payload = req.rawBody.toString();
-      const event = await this.stripeService.handleWebhook(payload, signature);
+      // Reconstruct raw body resiliently
+      let raw: string;
+      const anyReq: any = req as any;
+      if (anyReq.body && Buffer.isBuffer(anyReq.body)) {
+        raw = anyReq.body.toString('utf8');
+      } else if (typeof anyReq.rawBody === 'string') {
+        raw = anyReq.rawBody;
+      } else if (anyReq.rawBody && Buffer.isBuffer(anyReq.rawBody)) {
+        raw = anyReq.rawBody.toString('utf8');
+      } else {
+        raw = JSON.stringify(anyReq.body || {});
+      }
+      console.log('Webhook received raw length:', raw.length);
+
+      let event: any;
+      try {
+        if (!signature) throw new Error('Missing stripe-signature header');
+        event = await this.stripeService.handleWebhook(raw, signature);
+      } catch (sigErr) {
+        const devBypass =
+          process.env.NODE_ENV !== 'production' &&
+          process.env.STRIPE_WEBHOOK_DEV_BYPASS === '1';
+        if (devBypass) {
+          console.warn(
+            '[Webhook Dev Bypass] Signature verification failed or missing. Using parsed body. Reason:',
+            sigErr.message,
+          );
+          try {
+            event = JSON.parse(raw);
+          } catch {
+            event = { id: 'evt_dev_bypass', type: 'unknown', data: { object: {} } };
+          }
+        } else {
+          throw sigErr;
+        }
+      }
 
       // Handle events
       switch (event.type) {
@@ -45,14 +81,15 @@ export class StripeController {
             raw_status: paymentIntent.status,
           });
           break;
-        case 'payment_intent.payment_failed':
+        case 'payment_intent.payment_failed': {
           const failedPaymentIntent = event.data.object;
-          // Update transaction status in database
           await TransactionRepository.updateTransaction({
             reference_number: failedPaymentIntent.id,
             status: 'failed',
             raw_status: failedPaymentIntent.status,
           });
+          break;
+        }
         case 'payment_intent.canceled':
           const canceledPaymentIntent = event.data.object;
           // Update transaction status in database
@@ -80,82 +117,14 @@ export class StripeController {
           console.log(failedPayout);
           break;
         case 'customer.subscription.created':
-        case 'customer.subscription.updated':
+        case 'customer.subscription.updated': {
           const subObj: any = event.data.object;
           try {
-            const userId = subObj.metadata?.user_id; // ensure you set metadata when creating subscription
-            if (userId) {
-              // fetch payment method details
-              let pmBrand: string | undefined;
-              let pmLast4: string | undefined;
-              let pmFunding: string | undefined;
-              let pmType: string | undefined;
-              let pmId: string | undefined;
-              if (subObj.default_payment_method) {
-                const pm = await StripePayment.retrievePaymentMethod(
-                  subObj.default_payment_method as string,
-                );
-                pmId = pm.id;
-                if (pm?.card) {
-                  pmBrand = pm.card.brand;
-                  pmLast4 = pm.card.last4;
-                  pmFunding = pm.card.funding;
-                  pmType = 'card';
-                }
-              }
-              const existing = await this.prisma.subscription.findFirst({
-                where: { subscription_id: subObj.id },
-              });
-              const data = {
-                user_id: userId,
-                plan_name:
-                  subObj.items?.data?.[0]?.price?.recurring?.interval === 'year'
-                    ? 'yearly'
-                    : 'monthly',
-                description: subObj.items?.data?.[0]?.price?.nickname,
-                plan_id: subObj.items?.data?.[0]?.price?.id,
-                price: subObj.items?.data?.[0]?.price?.unit_amount
-                  ? subObj.items?.data?.[0]?.price?.unit_amount / 100
-                  : undefined,
-                currency:
-                  subObj.items?.data?.[0]?.price?.currency?.toUpperCase?.(),
-                interval: subObj.items?.data?.[0]?.price?.recurring?.interval,
-                status: subObj.status === 'active' ? 'active' : subObj.status,
-                start_date: subObj.start_date
-                  ? new Date(subObj.start_date * 1000)
-                  : new Date(),
-                end_date: subObj.current_period_end
-                  ? new Date(subObj.current_period_end * 1000)
-                  : undefined,
-                next_billing_date: subObj.current_period_end
-                  ? new Date(subObj.current_period_end * 1000)
-                  : undefined,
-                trial_start: subObj.trial_start
-                  ? new Date(subObj.trial_start * 1000)
-                  : undefined,
-                trial_end: subObj.trial_end
-                  ? new Date(subObj.trial_end * 1000)
-                  : undefined,
-                subscription_id: subObj.id,
-                payment_method_id: pmId,
-                payment_method_brand: pmBrand,
-                payment_method_last4: pmLast4,
-                payment_method_funding: pmFunding,
-                payment_method_type: pmType,
-              };
-              if (existing) {
-                await this.prisma.subscription.update({
-                  where: { id: existing.id },
-                  data,
-                });
-              } else {
-                await this.prisma.subscription.create({ data });
-              }
-            }
+            await this.subService.syncFromStripe(subObj);
           } catch (e) {
-            console.error('Failed to upsert subscription from webhook', e);
+            console.error('Subscription sync failed', e);
           }
-          break;
+          break; }
         case 'customer.subscription.deleted':
           const deletedSub: any = event.data.object;
           await this.prisma.subscription.updateMany({

@@ -42,6 +42,11 @@ export class AuthService {
           gender: true,
           date_of_birth: true,
           created_at: true,
+          email_verified_at: true,
+          updated_at: true,
+          billing_id: true,
+          IsSubscriptionActive: true,
+          role_users: true,
           subscriptions: { select: { id: true, status: true, end_date: true } },
         },
       });
@@ -85,62 +90,52 @@ export class AuthService {
   ) {
     try {
       const data: any = {};
+
+      console.log('hit in the update user service');
+
+      // Update user data fields if provided
       if (updateUserDto.name) {
         data.name = updateUserDto.name;
       }
-      if (updateUserDto.first_name) {
-        data.first_name = updateUserDto.first_name;
-      }
-      if (updateUserDto.last_name) {
-        data.last_name = updateUserDto.last_name;
-      }
-      if (updateUserDto.phone_number) {
-        data.phone_number = updateUserDto.phone_number;
-      }
-      if (updateUserDto.country) {
-        data.country = updateUserDto.country;
-      }
-      if (updateUserDto.state) {
-        data.state = updateUserDto.state;
-      }
-      if (updateUserDto.local_government) {
-        data.local_government = updateUserDto.local_government;
-      }
-      if (updateUserDto.city) {
-        data.city = updateUserDto.city;
-      }
-      if (updateUserDto.zip_code) {
-        data.zip_code = updateUserDto.zip_code;
-      }
-      if (updateUserDto.address) {
-        data.address = updateUserDto.address;
-      }
-      if (updateUserDto.gender) {
-        data.gender = updateUserDto.gender;
-      }
-      if (updateUserDto.date_of_birth) {
-        data.date_of_birth = DateHelper.format(updateUserDto.date_of_birth);
-      }
+
       if (image) {
-        // delete old image from storage
-        const oldImage = await this.prisma.user.findFirst({
-          where: { id: userId },
-          select: { avatar: true },
-        });
-        if (oldImage.avatar) {
-          await SazedStorage.delete(
-            appConfig().storageUrl.avatar + oldImage.avatar,
-          );
-        }
-
-        // upload file
         const fileName = `${StringHelper.randomString()}${image.originalname}`;
-        await SazedStorage.put(
-          appConfig().storageUrl.avatar + fileName,
-          image.buffer,
-        );
+        try {
+          // Attempt upload first to avoid deleting old before success
+          await SazedStorage.put(
+            appConfig().storageUrl.avatar + fileName,
+            image.buffer,
+          );
 
-        data.avatar = fileName;
+          const mediaUrl =
+            process.env.AWS_S3_ENDPOINT +
+            '/' +
+            process.env.AWS_S3_BUCKET +
+            appConfig().storageUrl.avatar +
+            `/${fileName}`;
+
+          // delete old image from storage only after successful upload
+          const oldImage = await this.prisma.user.findFirst({
+            where: { id: userId },
+            select: { avatar: true },
+          });
+
+          if (oldImage?.avatar) {
+            try {
+              await SazedStorage.delete(
+                appConfig().storageUrl.avatar + oldImage.avatar,
+              );
+            } catch (e) {
+              console.warn('Failed to delete old avatar:', e?.message || e);
+            }
+          }
+
+          data.avatar = mediaUrl;
+          console.log('Avatar uploaded to:', mediaUrl);
+          
+        } catch (e) {
+          console.warn('Avatar upload failed:', e?.message || e);
+        }
       }
       const user = await UserRepository.getUserDetails(userId);
       if (user) {
@@ -369,15 +364,12 @@ export class AuthService {
   }
 
   async register({
-    first_name,
-    last_name,
+    name,
     email,
     password,
     type,
-    agree_to_terms,
   }: {
-    first_name: string;
-    last_name: string;
+    name: string;
     email: string;
     password: string;
     type?: string;
@@ -397,26 +389,11 @@ export class AuthService {
         };
       }
 
-      const name = first_name && last_name ? first_name + ' ' + last_name : '';
-
-      // if agreed to terms and policy = toggle this button
-      const isAgreedToTermsAndPolicy = agree_to_terms === true;
-
-      if (!isAgreedToTermsAndPolicy) {
-        return {
-          statusCode: 401,
-          message: 'You must agree to the terms and policy',
-        };
-      }
-
       const user = await UserRepository.createUser({
         name: name,
-        first_name: first_name,
-        last_name: last_name,
         email: email,
         password: password,
         type: type,
-        agree_to_terms: isAgreedToTermsAndPolicy,
       });
 
       if (!user || user.success === false) {
@@ -696,11 +673,15 @@ export class AuthService {
     try {
       const user = await UserRepository.getUserDetails(user_id);
 
+      // console.log("param", user_id, oldPassword, newPassword)
+      // console.log("user", user)
+
       if (user) {
         const _isValidPassword = await UserRepository.validatePassword({
           email: user.email,
           password: oldPassword,
         });
+
         if (_isValidPassword) {
           await UserRepository.changePassword({
             email: user.email,
@@ -734,6 +715,7 @@ export class AuthService {
   async requestEmailChange(user_id: string, email: string) {
     try {
       const user = await UserRepository.getUserDetails(user_id);
+
       if (user) {
         const token = await UcodeRepository.createToken({
           userId: user.id,
@@ -777,12 +759,15 @@ export class AuthService {
     try {
       const user = await UserRepository.getUserDetails(user_id);
 
+      console.log('params', user_id, new_email, token);
+
       if (user) {
         const existToken = await UcodeRepository.validateToken({
-          email: new_email,
+          email: user.email,
           token: token,
           forEmailChange: true,
         });
+        // console.log("existToken", existToken);
 
         if (existToken) {
           await UserRepository.changeEmail({

@@ -27,6 +27,11 @@ import { InspirationModule } from './modules/inspiration/inspiration.module';
 import { SubscriptionGuard } from './common/guard/subscription/subscription.guard';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { ProfileModule } from './modules/profile/profile.module';
+import { MoodModule } from './modules/mood/mood.module';
+import { StatsModule } from './modules/stats/stats.module';
+import { AccountModule } from './modules/account/account.module';
+import { FirebaseStorageModule } from './modules/firebase-storage/firebase-storage.module';
+import { HomeModule } from './modules/home/home.module';
 
 @Module({
   imports: [
@@ -63,6 +68,11 @@ import { ProfileModule } from './modules/profile/profile.module';
     InspirationModule,
     SubscriptionModule,
     ProfileModule,
+    MoodModule,
+    StatsModule,
+    AccountModule,
+    FirebaseStorageModule,
+    HomeModule,
   ],
   controllers: [AppController],
   providers: [

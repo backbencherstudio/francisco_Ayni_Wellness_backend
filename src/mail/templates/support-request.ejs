@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Support Request - <%= appName || process.env.APP_NAME %></title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    .email-container {
+      background-color: #ffffff;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .email-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .email-header h1 {
+      color: #3498db;
+      font-size: 24px;
+    }
+    .email-body {
+      line-height: 1.6;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    .email-body p {
+      margin-bottom: 10px;
+    }
+    .ticket-meta { font-size: 13px; color: #666; margin-top: 4px; }
+    .description-box {
+      background: #fbfbfc;
+      border: 1px solid #e5e8ef;
+      border-radius: 8px;
+      padding: 16px;
+      white-space: pre-wrap;
+      font-family: monospace;
+      font-size: 14px;
+      color: #2c3e50;
+      margin: 12px 0 24px;
+    }
+    .btn-wrapper { text-align:center; margin-top:28px; }
+    .btn-action {
+      background: #6366f1;
+      color: #fff !important;
+      padding: 12px 24px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      display: inline-block;
+    }
+    .badge {
+      display:inline-block;
+      padding:4px 10px;
+      background:#edf2ff;
+      color:#3f51b5;
+      border-radius:12px;
+      font-size:12px;
+      font-weight:600;
+      letter-spacing:.5px;
+      margin-top:8px;
+    }
+    .email-footer {
+      text-align: center;
+      font-size: 12px;
+      color: #777;
+      margin-top: 30px;
+    }
+    .email-footer p {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1 style="margin:0 0 4px; font-size:22px; color:#111827;">New Support Request</h1>
+      <div class="badge">Ticket #<%= ticketId %></div>
+    </div>
+    <div class="email-body">
+      <p><strong>User:</strong> <%= userName %> <%= userEmail ? '(' + userEmail + ')' : '' %></p>
+      <p><strong>Submitted At:</strong> <%= submittedAt %></p>
+      <p style="margin-top:18px; font-weight:600;">Description:</p>
+      <div class="description-box"><%= description %></div>
+      <p>You can follow up or resolve this ticket in the admin dashboard.</p>
+      <% if (dashboardUrl) { %>
+        <div class="btn-wrapper">
+          <a class="btn-action" href="<%= dashboardUrl %>">View Ticket</a>
+        </div>
+      <% } %>
+    </div>
+    <div class="email-footer">
+      <p>Delivered by <strong><%= appName || process.env.APP_NAME %></strong>. This message was generated automatically.</p>
+      <p style="margin-top:6px;">Ticket ID: <%= ticketId %></p>
+    </div>
+  </div>
+</body>
+</html>
