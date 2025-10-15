@@ -1,11 +1,11 @@
 import * as crypto from 'crypto';
 import { randomInt } from 'crypto';
 import { v4 as uuid } from 'uuid';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../prisma/prisma.singleton';
 import { DateHelper } from '../../helper/date.helper';
 import { UserRepository } from '../user/user.repository';
 
-const prisma = new PrismaClient();
+// shared prisma singleton
 
 export class UcodeRepository {
   /**
@@ -59,10 +59,14 @@ export class UcodeRepository {
     token: string;
     forEmailChange?: boolean;
   }) {
+    console.log('validateToken', email, token, forEmailChange);
+
     const userDetails = await UserRepository.exist({
       field: 'email',
       value: email,
     });
+
+    // console.log('userDetails', userDetails);
 
     let proceedNext = false;
     if (forEmailChange == true) {
@@ -83,8 +87,10 @@ export class UcodeRepository {
           },
         },
       });
+      console.log('existToken', existToken);
 
       if (existToken) {
+        console.log('hi8t');
         if (existToken.expired_at) {
           const data = await prisma.ucode.findFirst({
             where: {
@@ -103,13 +109,15 @@ export class UcodeRepository {
               ],
             },
           });
+          console.log('data', data);
+
           if (data) {
             // delete this token
-            // await prisma.ucode.delete({
-            //   where: {
-            //     id: data.id,
-            //   },
-            // });
+            await prisma.ucode.delete({
+              where: {
+                id: data.id,
+              },
+            });
             return true;
           } else {
             return false;
@@ -154,7 +162,6 @@ export class UcodeRepository {
           email: params.email,
           token: token,
           expired_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-          status: 1,
         },
       });
 

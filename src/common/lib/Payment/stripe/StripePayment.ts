@@ -469,4 +469,46 @@ export class StripePayment {
   static async retrievePaymentMethod(id: string) {
     return Stripe.paymentMethods.retrieve(id);
   }
+
+  // Server-side helper to create a subscription with optional trial and immediate payment confirmation intent
+  static async createSubscription({
+    customer_id,
+    price_id,
+    payment_method_id,
+    trial_days,
+    metadata,
+  }: {
+    customer_id: string;
+    price_id: string;
+    payment_method_id: string;
+    trial_days?: number;
+    metadata?: Record<string, string>;
+  }): Promise<stripe.Subscription> {
+    const sub = await Stripe.subscriptions.create({
+      customer: customer_id,
+      items: [{ price: price_id }],
+      metadata,
+      trial_period_days: trial_days,
+      payment_behavior: 'default_incomplete',
+      expand: ['latest_invoice.payment_intent'],
+      default_payment_method: payment_method_id,
+    });
+    return sub;
+  }
+
+  // Confirm a PaymentIntent if it is in a confirmable state (no 3DS required)
+  static async confirmPaymentIntentIfNeeded(pi: stripe.PaymentIntent | undefined | null) {
+    if (!pi) return null;
+    if (pi.status === 'requires_confirmation') {
+      const confirmed = await Stripe.paymentIntents.confirm(pi.id);
+      return confirmed;
+    }
+    return pi;
+  }
+
+  static async retrieveSubscriptionAndExpand(id: string) {
+    return Stripe.subscriptions.retrieve(id, {
+      expand: ['latest_invoice.payment_intent'],
+    });
+  }
 }

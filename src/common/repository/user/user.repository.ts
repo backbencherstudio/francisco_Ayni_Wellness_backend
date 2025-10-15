@@ -1,12 +1,12 @@
 import * as bcrypt from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../../prisma/prisma.singleton';
 import appConfig from '../../../config/app.config';
 import { ArrayHelper } from '../../helper/array.helper';
 import { Role } from '../../guard/role/role.enum';
 
-const prisma = new PrismaClient();
+// using shared prisma singleton
 
 export class UserRepository {
   /**
@@ -38,6 +38,7 @@ export class UserRepository {
    * @returns
    */
   static async getUserDetails(userId: string) {
+    // console.log("user id", userId)
     const user = await prisma.user.findFirst({
       where: {
         id: userId,
@@ -58,6 +59,7 @@ export class UserRepository {
         },
       },
     });
+    // console.log("user", user);
     return user;
   }
 
@@ -191,35 +193,24 @@ export class UserRepository {
    */
   static async createUser({
     name,
-    first_name,
-    last_name,
     email,
     password,
     phone_number,
     role_id = null,
     type = 'user',
-    agree_to_terms,
+    
   }: {
     name?: string;
-    first_name?: string;
-    last_name?: string;
     email: string;
     password: string;
     phone_number?: string;
     role_id?: string;
     type?: string;
-    agree_to_terms?: boolean;
   }) {
     try {
       const data = {};
       if (name) {
         data['name'] = name;
-      }
-      if (first_name) {
-        data['first_name'] = first_name;
-      }
-      if (last_name) {
-        data['last_name'] = last_name;
       }
       if (phone_number) {
         data['phone_number'] = phone_number;
@@ -253,17 +244,6 @@ export class UserRepository {
         // if (type == Role.VENDOR) {
         //   data['approved_at'] = DateHelper.now();
         // }
-      }
-
-      // if agreed to terms and policy = toggle this button
-      const isAgreedToTermsAndPolicy = agree_to_terms === true;
-      data['agree_to_terms'] = isAgreedToTermsAndPolicy;
-
-      if (!isAgreedToTermsAndPolicy) {
-        return {
-          success: false,
-          message: 'You must agree to the terms and privacy policy',
-        };
       }
 
       const user = await prisma.user.create({

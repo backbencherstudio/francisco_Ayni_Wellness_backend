@@ -9,12 +9,14 @@ import { DateHelper } from '../../../common/helper/date.helper';
 import { MessageGateway } from './message.gateway';
 import { UserRepository } from '../../../common/repository/user/user.repository';
 import { Role } from '../../../common/guard/role/role.enum';
+import { NotificationService as AppNotificationService } from '../../application/notification/notification.service';
 
 @Injectable()
 export class MessageService {
   constructor(
     private prisma: PrismaService,
     private readonly messageGateway: MessageGateway,
+    private readonly appNotification: AppNotificationService,
   ) {}
 
   async create(user_id: string, createMessageDto: CreateMessageDto) {
@@ -79,9 +81,18 @@ export class MessageService {
         },
       });
 
-      // this.messageGateway.server
-      //   .to(this.messageGateway.clients.get(data.receiver_id))
-      //   .emit('message', { from: data.receiver_id, data: message });
+      // Dispatch a notification to the receiver (in-app + stored)
+      try {
+        await this.appNotification.createAndDispatch({
+          sender_id: user_id,
+          receiver_id: data.receiver_id,
+          text: 'You have a new message',
+          type: 'message',
+          entity_id: message.id,
+        });
+      } catch (e) {
+        // Non-blocking
+      }
 
       return {
         success: true,

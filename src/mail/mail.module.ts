@@ -1,5 +1,6 @@
 import { MailerModule } from '@nestjs-modules/mailer';
 import { Global, Module } from '@nestjs/common';
+import { existsSync } from 'fs';
 import { EjsAdapter } from '@nestjs-modules/mailer/dist/adapters/ejs.adapter';
 import { MailService } from './mail.service';
 import appConfig from '../config/app.config';
@@ -25,13 +26,15 @@ import { MailProcessor } from './processors/mail.processor';
         from: appConfig().mail.from,
       },
       template: {
-        // dir: join(__dirname, 'templates'),
-        dir: process.cwd() + '/dist/mail/templates/',
-        // adapter: new HandlebarsAdapter(), // or new PugAdapter() or new EjsAdapter()
+        dir: (() => {
+          const distPath = process.cwd() + '/dist/mail/templates/';
+          const srcPath = process.cwd() + '/src/mail/templates/';
+          const isProd = process.env.NODE_ENV === 'production';
+          if (isProd) return distPath;
+          return existsSync(srcPath) ? srcPath : distPath; // dev: prefer src for live reload
+        })(),
         adapter: new EjsAdapter(),
-        options: {
-          // strict: true,
-        },
+        options: {},
       },
     }),
     BullModule.registerQueue({

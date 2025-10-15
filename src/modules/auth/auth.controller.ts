@@ -28,7 +28,7 @@ import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('auth')
 @Controller('auth')
-@SkipSubscription() 
+@SkipSubscription()
 export class AuthController {
   constructor(private authService: AuthService) {}
 
@@ -56,28 +56,19 @@ export class AuthController {
   @Post('register')
   async create(@Body() data: CreateUserDto, @Req() req: Request) {
     try {
-      const first_name = data.first_name;
-      const last_name = data.last_name;
+      const name = data.name;
       const email = data.email;
       const password = data.password;
       const type = data.type;
-      const agree_to_terms = data.agree_to_terms;
 
-      if (!first_name) {
-        throw new HttpException(
-          'First name not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
+      if (!name) {
+        throw new HttpException('Name not provided', HttpStatus.UNAUTHORIZED);
       }
-      if (!last_name) {
-        throw new HttpException(
-          'Last name not provided',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
+
       if (!email) {
         throw new HttpException('Email not provided', HttpStatus.UNAUTHORIZED);
       }
+
       if (!password) {
         throw new HttpException(
           'Password not provided',
@@ -85,20 +76,11 @@ export class AuthController {
         );
       }
 
-      if (agree_to_terms !== true) {
-        throw new HttpException(
-          'You must agree to the terms and policy',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-
       const response = await this.authService.register({
-        first_name: first_name,
-        last_name: last_name,
+        name: name,
         email: email,
         password: password,
         type: type,
-        agree_to_terms: agree_to_terms,
       });
 
       return response;
@@ -205,17 +187,6 @@ export class AuthController {
   @Patch('update')
   @UseInterceptors(
     FileInterceptor('image', {
-      // storage: diskStorage({
-      //   destination:
-      //     appConfig().storageUrl.rootUrl + appConfig().storageUrl.avatar,
-      //   filename: (req, file, cb) => {
-      //     const randomName = Array(32)
-      //       .fill(null)
-      //       .map(() => Math.round(Math.random() * 16).toString(16))
-      //       .join('');
-      //     return cb(null, `${randomName}${file.originalname}`);
-      //   },
-      // }),
       storage: memoryStorage(),
     }),
   )

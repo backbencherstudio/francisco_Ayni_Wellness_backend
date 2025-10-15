@@ -40,28 +40,43 @@ export class ProfileController {
     }
   }
 
-  @Post()
-  create(@Body() createProfileDto: CreateProfileDto) {
-    return this.profileService.create(createProfileDto);
+  // update profile
+  @ApiOperation({ summary: 'Update my profile' })
+  @Patch('me')
+  async updateMe(
+    @GetUser() user: any,
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
+    try {
+      const user_id = user.userId;
+
+      const response = await this.profileService.updateMe(
+        user_id,
+        updateProfileDto,
+      );
+      return response;
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to update user details',
+      };
+    }
+  }
+  
+
+  @ApiOperation({
+    summary: 'Profile overview metrics (habits + AI routines)',
+    description:
+      'Returns combined metrics for habits and AI routines, including level, streaks, meditation minutes, and today\'s routine summary.',
+  })
+  @Get('overview/me')
+  async overview(@GetUser() user: any) {
+    return this.profileService.overview(user.userId);
   }
 
-  @Get()
-  findAll() {
-    return this.profileService.findAll();
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.profileService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateProfileDto: UpdateProfileDto) {
-    return this.profileService.update(+id, updateProfileDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.profileService.remove(+id);
+  @ApiOperation({ summary: 'Unlocked achievements for the current user' })
+  @Get('achievements/me')
+  async achievements(@GetUser() user: any) {
+    return this.profileService.achievedAchievements(user.userId);
   }
 }

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CreateWebsiteInfoDto } from './dto/create-website-info.dto';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { SazedStorage } from '../../../common/lib/disk/SazedStorage';
+import { SazedStorage } from '../../../common/lib/Disk/SazedStorage';
 import appConfig from '../../../config/app.config';
 import { StringHelper } from '../../../common/helper/string.helper';
 

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Feedback - <%= appName || process.env.APP_NAME %></title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
+    .email-container {
+      background-color: #ffffff;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px 20px 28px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .email-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .email-header h1 {
+      color: #3498db;
+      font-size: 24px;
+      margin: 0 0 4px;
+    }
+    .email-header .timestamp {
+      font-size: 12px;
+      color: #888;
+    }
+    .email-body {
+      line-height: 1.6;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+    .email-body p { margin-bottom: 14px; }
+    .feedback-box {
+      background-color: #f9fafb;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 14px 16px;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 14px;
+      white-space: pre-wrap;
+      color: #2c3e50;
+      margin-top: 4px;
+      margin-bottom: 22px;
+    }
+    .email-footer {
+      text-align: center;
+      font-size: 12px;
+      color: #777;
+      margin-top: 24px;
+    }
+    .email-footer p { margin: 5px 0; }
+    hr {
+      border: 0;
+      border-top: 1px solid #e0e0e0;
+      margin-top: 26px;
+    }
+    .label { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1>New Feedback</h1>
+      <div class="timestamp"><%= new Date().toISOString() %></div>
+    </div>
+    <div class="email-body">
+      <p><span class="label">From:</span> <%= userName %> &lt;<%= userEmail %>&gt;</p>
+      <p><span class="label">App:</span> <%= appName || process.env.APP_NAME %></p>
+      <p class="label" style="margin-bottom:6px;">Message:</p>
+  <div class="feedback-box"><%= typeof feedback !== 'undefined' && feedback !== null && feedback !== '' ? feedback : 'No feedback content provided.' %></div>
+      <p>This feedback was submitted via the in-app feedback endpoint. You can reply directly to the user email if needed.</p>
+    </div>
+    <div class="email-footer">
+      <p>Regards,</p>
+      <p><strong><%= appName || process.env.APP_NAME %></strong></p>
+      <hr />
+      <p>If this was unexpected, you can disable feedback notifications in your admin settings.</p>
+    </div>
+  </div>
+</body>
+</html>

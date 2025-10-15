@@ -14,10 +14,12 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
+import { CompleteHabitDto } from './dto/complete-habit.dto';
+import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
 
 @ApiTags('Habit')
 @Controller('habit')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 export class HabitController {
   constructor(private readonly habitService: HabitService) {}
 
@@ -25,7 +27,7 @@ export class HabitController {
   @Post('create')
   async createHabit(@GetUser() user, @Body() createHabitDto: CreateHabitDto) {
     try {
-      console.log('hitted and user is:', user);
+      // console.log('hitted and user is:', user);
       return await this.habitService.createHabit(user.userId, createHabitDto);
     } catch (error) {
       console.error('Error creating habit:', error);
@@ -33,55 +35,49 @@ export class HabitController {
     }
   }
 
-  @ApiOperation({ summary: 'Get all reminders' })
-  @Get('reminders')
-  async getAllReminders(@GetUser() user) {
-    try {
-      console.log('Fetching reminders for user:', user);
-      return await this.habitService.getAllReminders(user.userId);
-    } catch (error) {
-      console.error('Error fetching reminders:', error);
-      throw error;
-    }
+  @ApiOperation({ summary: 'Get all habits for the user' })
+  @Get()
+  async findAll(@GetUser() user) {
+    return this.habitService.getAllHabits(user.userId);
   }
 
-  @ApiOperation({ summary: 'Get upcoming reminders' })
-  @Get('reminders/upcoming')
-  async getUpcomingReminders(@GetUser() user) {
-    try {
-      console.log('Fetching upcoming reminders for user:', user);
-      return await this.habitService.getUpcomingReminders(user.userId);
-    } catch (error) {
-      console.error('Error fetching upcoming reminders:', error);
-      throw error;
-    }
+  @ApiOperation({ summary: "Today's habits (with completion status)" })
+  @Get('today')
+  async today(@GetUser() user) {
+    return this.habitService.getTodayHabits(user.userId);
   }
 
-  @ApiOperation({ summary: 'Turn off/on a habit reminder' })
-  @Patch(':id/reminder/turn-off-on')
-  async turnOffOnReminder(@GetUser() user, @Param('id') id: string) {
-    try {
-      console.log('Turning off/on reminder for habit:', id);
-
-      return await this.habitService.turnOffOnReminder(user.userId, id);
-    } catch (error) {
-      console.error('Error turning off/on reminder:', error);
-      throw error;
-    }
-  }
-
+  @ApiOperation({ summary: 'Get habit by ID' })
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.habitService.findOne(+id);
+  async findOne(@GetUser() user, @Param('id') id: string) {
+    return this.habitService.getHabitById(user.userId, id);
+  }
+
+  // --- Completion Tracking ------------------------------------------------
+
+  @ApiOperation({ summary: 'Complete a habit' })
+  @Post(':id/complete')
+  async complete(@GetUser() user, @Param('id') id: string, @Body() completeHabitDto: CompleteHabitDto) {
+    return this.habitService.completeHabit(user.userId, id, completeHabitDto);
+  }
+
+  @ApiOperation({ summary: 'Habit history (logs) for last N days' })
+  @Get(':id/history')
+  async history(@GetUser() user, @Param('id') id: string) {
+    return this.habitService.habitHistory(user.userId, id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateHabitDto: UpdateHabitDto) {
-    return this.habitService.update(+id, updateHabitDto);
+  async update(
+    @GetUser() user,
+    @Param('id') id: string,
+    @Body() updateHabitDto: UpdateHabitDto,
+  ) {
+    return this.habitService.updateHabit(user.userId, id, updateHabitDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.habitService.remove(+id);
+  async remove(@GetUser() user, @Param('id') id: string) {
+    return this.habitService.removeHabit(user.userId, id);
   }
 }

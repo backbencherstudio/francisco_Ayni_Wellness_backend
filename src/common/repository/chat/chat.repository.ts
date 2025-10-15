@@ -1,6 +1,5 @@
-import { PrismaClient, MessageStatus } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { MessageStatus } from '@prisma/client';
+import prisma from '../../../prisma/prisma.singleton';
 
 export class ChatRepository {
   /**
