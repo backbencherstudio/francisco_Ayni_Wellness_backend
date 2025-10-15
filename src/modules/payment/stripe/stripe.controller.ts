@@ -6,6 +6,7 @@ import { TransactionRepository } from '../../../common/repository/transaction/tr
 import { PrismaService } from '../../../prisma/prisma.service';
 import { StripePayment } from '../../../common/lib/Payment/stripe/StripePayment';
 import { AppSubscriptionService } from '../../subscription/subscription.service';
+import { NotificationService as AppNotificationService } from '../../application/notification/notification.service';
 // This controller is now subscription/payment (Stripe) only; order purchase flow removed.
 
 @Controller('payment/stripe')
@@ -15,6 +16,7 @@ export class StripeController {
     private readonly stripeService: StripeService,
     private prisma: PrismaService,
     private subService: AppSubscriptionService,
+    private appNotification: AppNotificationService,
   ) {}
 
   @Post('webhook')
@@ -121,6 +123,16 @@ export class StripeController {
           const subObj: any = event.data.object;
           try {
             await this.subService.syncFromStripe(subObj);
+            // Notify user about subscription status change
+            const userId = subObj.metadata?.user_id;
+            if (userId) {
+              await this.appNotification.createAndDispatch({
+                receiver_id: userId,
+                text: `Your subscription is ${subObj.status}`,
+                type: 'payment_transaction',
+                entity_id: subObj.id,
+              });
+            }
           } catch (e) {
             console.error('Subscription sync failed', e);
           }
@@ -131,6 +143,14 @@ export class StripeController {
             where: { subscription_id: deletedSub.id },
             data: { status: 'canceled', canceled_at: new Date() },
           });
+          if (deletedSub.metadata?.user_id) {
+            await this.appNotification.createAndDispatch({
+              receiver_id: deletedSub.metadata.user_id,
+              text: 'Your subscription has been canceled',
+              type: 'payment_transaction',
+              entity_id: deletedSub.id,
+            });
+          }
           break;
         default:
           // console.log(`Unhandled event type ${event.type}`);

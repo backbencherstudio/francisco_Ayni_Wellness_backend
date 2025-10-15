@@ -33,23 +33,30 @@ export class MoodService {
       if (score <= 8) return 'Good';
       return 'Great';
     })();
+
   const positiveSet = new Set(EMOTIONS.filter(e=>e.valence==='positive').map(e=>e.key));
   const negativeSet = new Set(EMOTIONS.filter(e=>e.valence==='negative').map(e=>e.key));
+
     let pos=0, neg=0;
     for (const e of emotions.map(x=>this.normalizeEmotion(x))) {
       if (positiveSet.has(e)) pos++; else if (negativeSet.has(e)) neg++;
     }
+
     const delta = pos - neg;
     const order = ['Very Low','Low','Neutral','Good','Great'];
+    
     let idx = order.indexOf(base);
     if (delta >= 2 && idx < order.length-1) idx++; else if (delta <= -2 && idx>0) idx--;
     const label = order[idx];
     const emojiMap: Record<string,string> = {
       'Very Low':'😞','Low':'🙁','Neutral':'😐','Good':'😊','Great':'😁'
     };
+
     const toneKey = label.toLowerCase().replace(/\s+/g,'_');
     const explanation = this.buildExplanation(label, score, pos, neg);
+
     return { label, emoji: emojiMap[label], tone: toneKey, explanation };
+    
   }
 
   private buildExplanation(label: string, score: number, pos: number, neg: number) {

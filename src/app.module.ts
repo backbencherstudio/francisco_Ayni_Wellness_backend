@@ -32,6 +32,8 @@ import { StatsModule } from './modules/stats/stats.module';
 import { AccountModule } from './modules/account/account.module';
 import { FirebaseStorageModule } from './modules/firebase-storage/firebase-storage.module';
 import { HomeModule } from './modules/home/home.module';
+import { AiRoutinesModule } from './modules/ai-routines/ai-routines.module';
+import { RemindersModule } from './modules/reminders/reminders.module';
 
 @Module({
   imports: [
@@ -73,6 +75,8 @@ import { HomeModule } from './modules/home/home.module';
     AccountModule,
     FirebaseStorageModule,
     HomeModule,
+    AiRoutinesModule,
+    RemindersModule,
   ],
   controllers: [AppController],
   providers: [

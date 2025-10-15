@@ -34,6 +34,9 @@ export class SazedStorage {
    * @returns
    */
   public static disk(disk: DiskType): StorageClass {
+    if (!this._config) {
+      throw new Error('SazedStorage not configured. Call SazedStorage.config() in bootstrap.');
+    }
     this._config.driver = disk;
     return this.storageDisk();
   }
@@ -91,7 +94,10 @@ export class SazedStorage {
    * @returns
    */
   private static storageDisk() {
-    const driver: string = this._config.driver;
+    if (!this._config) {
+      throw new Error('SazedStorage not configured. Call SazedStorage.config() in bootstrap.');
+    }
+    const driver: string = this._config.driver as any;
     const config: DiskOption = this._config;
 
     let driverAdapter: IStorage;

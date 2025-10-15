@@ -4,13 +4,12 @@ import { CreateInspirationDto } from './dto/create-inspiration.dto';
 import { UpdateInspirationDto } from './dto/update-inspiration.dto';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { SubscriptionOnly } from '../../common/decorator/subscription-only.decorator';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @ApiTags('Inspiration')
 @Controller('inspiration')
 @UseGuards(JwtAuthGuard)
-@SubscriptionOnly()
+
 export class InspirationController {
   constructor(private readonly inspirationService: InspirationService) {}
 

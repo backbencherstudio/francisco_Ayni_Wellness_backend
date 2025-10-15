@@ -2,9 +2,10 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { FirebaseStorageService } from './firebase-storage.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
 
 @ApiTags('Firebase Storage')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('firebase')
 export class FirebaseStorageController {
   constructor(private readonly storageService: FirebaseStorageService) {}

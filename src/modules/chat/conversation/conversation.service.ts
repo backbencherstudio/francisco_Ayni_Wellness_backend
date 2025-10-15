@@ -5,7 +5,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { PrismaClient } from '@prisma/client';
 import appConfig from '../../../config/app.config';
 // Update the import path below to the correct location of SazedStorage
-import { SazedStorage } from '../../../common/lib/disk/SazedStorage';
+import { SazedStorage } from '../../../common/lib/Disk/SazedStorage';
 import { DateHelper } from '../../../common/helper/date.helper';
 import { MessageGateway } from '../message/message.gateway';
 

@@ -80,14 +80,16 @@ export default () => ({
   storageUrl: {
     rootUrl: './public/storage',
     rootUrlPublic: '/public/storage',
-    // storage directory
     package: '/package',
     destination: '/destination',
     blog: '/blog',
-    avatar: '/avatar',
+    avatar: '/avatar/',
     websiteInfo: '/website-info',
-    // chat
     attachment: '/attachment',
+    communityVideo: '/community/video',
+    communityPhoto: '/community/photo',
+    communityDocument: '/community/document',
+    media: '/media',
   },
 
   defaultUser: {

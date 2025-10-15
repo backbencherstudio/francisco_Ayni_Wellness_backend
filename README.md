@@ -82,3 +82,22 @@ Swagger: http://{domain_name}/api/docs
 - Bullmq
 - Redis
 - etc.
+
+## Reminders
+
+The app includes a minute-level scheduler that delivers due routine and habit reminders. Create reminders via the API to match the UI cards.
+
+Endpoints:
+- POST /reminders: { name, time("HH:MM"), days(["Mon","Tue",...]) | date("YYYY-MM-DD"), tz, window, habit_id?, routine_id?, active? }
+- GET /reminders/upcoming-today: 3-card list for "Coming Up Today"
+- GET /reminders/all: list all reminders for the user
+- PATCH /reminders/:id: update fields (recomputes next scheduled_at)
+- PATCH /reminders/:id/toggle: enable/disable
+- DELETE /reminders/:id
+- GET /reminders/windows: Morning/Afternoon/Evening/Night segments
+- GET /reminders/presets: Flat time presets (HH:MM:SS)
+
+Scheduling rules:
+- One-time reminder (date + time): delivered once, then deactivated
+- Recurring reminder (time [+ days]): auto-reschedules to next occurrence based on tz and days
+- Cron scans every minute, uses a grace window to avoid missing reminders after restarts and de-duplicates with last_triggered_at

@@ -64,7 +64,11 @@ export class ProfileController {
   }
   
 
-  @ApiOperation({ summary: 'Profile overview metrics' })
+  @ApiOperation({
+    summary: 'Profile overview metrics (habits + AI routines)',
+    description:
+      'Returns combined metrics for habits and AI routines, including level, streaks, meditation minutes, and today\'s routine summary.',
+  })
   @Get('overview/me')
   async overview(@GetUser() user: any) {
     return this.profileService.overview(user.userId);

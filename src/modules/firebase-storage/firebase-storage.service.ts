@@ -92,6 +92,8 @@ export class FirebaseStorageService {
       size: f.metadata.size ? parseInt(String(f.metadata.size), 10) : 0,
       contentType: f.metadata.contentType,
       updated: f.metadata.updated,
+      // Expose custom user metadata (e.g., duration_sec, duration_ms, duration_min) if provided at upload
+      customMetadata: (f.metadata && (f.metadata as any).metadata) || undefined,
     }));
   }
 

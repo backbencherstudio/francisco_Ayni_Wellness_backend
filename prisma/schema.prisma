@@ -95,6 +95,10 @@ model User {
   mood_daily_aggregates MoodDailyAggregate[]
   habit_logs            HabitLog[]
   support_tickets       SupportTicket[]
+  // AI Routines relations
+  routine_profile       UserRoutineProfile?
+  routines              Routine[]
+  routine_mood_checks   RoutineMoodCheck[]
 
   @@map("users")
 }
@@ -377,10 +381,18 @@ model Reminders {
   habit_id String?
   habit    Habit?  @relation(fields: [habit_id], references: [id])
 
+  routine_id  String?
+  routine     Routine? @relation(fields: [routine_id], references: [id], onDelete: Cascade)
+
   name   String?
   time   String?
   days   String? // e.g. "Mon,Tue,Wed"
   active Boolean? @default(true)
+
+  scheduled_at DateTime?
+  window String?
+  tz String?
+  last_triggered_at DateTime?
 
   @@map("reminders")
 }
@@ -726,4 +738,107 @@ model UserSetting {
   value String?
 
   @@map("user_settings")
+}
+
+// ================= AI Routines =================
+
+enum RoutineStatus {
+  generated
+  started
+  completed
+}
+
+enum RoutineItemType {
+  Meditation
+  SoundHealing @map("Sound healing")
+  Journaling
+  Podcast
+}
+
+enum RoutineItemStatus {
+  pending
+  completed
+}
+
+model UserRoutineProfile {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+
+  user_id String @unique
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  onboarding_completed_at DateTime?
+  preferences Json? // arbitrary user choices (duration, preferred types, times)
+  onboarding_version Int? @default(1)
+
+  @@map("user_routine_profiles")
+}
+
+model Routine {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  date       DateTime // calendar day for which this routine applies (UTC day bucket)
+  status     RoutineStatus @default(generated)
+  mood_entry_id String?
+  mood_check_id String?
+  mood_check    RoutineMoodCheck? @relation(fields: [mood_check_id], references: [id], onDelete: SetNull)
+  remind_at  DateTime?
+  completed_at DateTime?
+  notes      String?
+  profile_snapshot Json? // snapshot of preferences used for generation
+
+  items RoutineItem[]
+  Reminders Reminders[]
+
+  @@unique([user_id, date])
+  @@index([user_id, date])
+  @@map("routines")
+}
+
+model RoutineItem {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+
+  routine_id String
+  routine    Routine @relation(fields: [routine_id], references: [id], onDelete: Cascade)
+
+  type       RoutineItemType
+  title      String?
+  description String?
+  gcs_path   String?    // path in Firebase Storage bucket
+  content_type String?   // audio | text | video
+  duration_min Int?
+  order      Int? @default(0)
+
+  status     RoutineItemStatus @default(pending)
+  completed_at DateTime?
+  journal_text String?
+
+  @@index([routine_id])
+  @@map("routine_items")
+}
+
+model RoutineMoodCheck {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  routine Routine[]
+
+  rating    Int?
+  emotions  String[]
+  statements String[]
+  note      String?   @db.VarChar(1000)
+
+  @@index([user_id, created_at])
+  @@map("routine_mood_checks")
 }

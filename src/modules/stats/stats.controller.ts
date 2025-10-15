@@ -12,25 +12,42 @@ export class StatsController {
 
   @ApiOperation({ summary: 'Summary metrics for selected period (week|month)' })
   @Get('summary')
-  async summary(@GetUser() user, @Query('period') period: 'week' | 'month' | 'year' = 'week') {
+  async summary(
+    @GetUser() user,
+    @Query('period') period: 'week' | 'month' | 'year' = 'week',
+  ) {
     return this.statsService.summary(user.userId, period);
   }
 
-  @ApiOperation({ summary: 'Progress rows for selected period (week=days, month=days, year=months)' })
+  @ApiOperation({
+    summary:
+      'Progress rows for selected period (week=days)',
+  })
   @Get('progress')
-  async progress(@GetUser() user, @Query('period') period: 'week' | 'month' | 'year' = 'week') {
+  async progress(
+    @GetUser() user,
+    @Query('period') period: 'week' | 'month' | 'year' = 'week',
+  ) {
     return this.statsService.progress(user.userId, period);
   }
 
   @ApiOperation({ summary: 'Habit progress over last 30 days (per habit)' })
   @Get('habit-progress')
-  async habitProgress(@GetUser() user, @Query('period') period: 'week' | 'month' | 'year' = 'month') {
+  async habitProgress(
+    @GetUser() user,
+    @Query('period') period: 'week' | 'month' | 'year' = 'month',
+  ) {
     return this.statsService.habitProgress(user.userId, period);
   }
 
-  @ApiOperation({ summary: 'Habit progress grouped by category for selected period' })
+  @ApiOperation({
+    summary: 'Habit progress grouped by category for selected period',
+  })
   @Get('habit-progress/categories')
-  async habitProgressByCategory(@GetUser() user, @Query('period') period: 'week' | 'month' | 'year' = 'month') {
+  async habitProgressByCategory(
+    @GetUser() user,
+    @Query('period') period: 'week' | 'month' | 'year' = 'month',
+  ) {
     return this.statsService.habitProgressByCategory(user.userId, period);
   }
 

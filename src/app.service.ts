@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { SazedStorage } from './common/lib/disk/SazedStorage';
+import { SazedStorage } from './common/lib/Disk/SazedStorage';
 
 @Injectable()
 export class AppService {

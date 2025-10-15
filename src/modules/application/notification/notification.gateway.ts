@@ -11,8 +11,6 @@ import { Server, Socket } from 'socket.io';
 import { OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 import { NotificationService } from './notification.service';
-import { CreateNotificationDto } from './dto/create-notification.dto';
-import { UpdateNotificationDto } from './dto/update-notification.dto';
 import appConfig from '../../../config/app.config';
 
 @WebSocketGateway({
@@ -51,9 +49,18 @@ export class NotificationGateway
       password: appConfig().redis.password,
     });
 
-    this.redisSubClient.subscribe('notification', (err, message: string) => {
-      const data = JSON.parse(message);
-      this.server.emit('receiveNotification', data);
+    this.redisSubClient.subscribe('notification');
+    this.redisSubClient.on('message', (channel, message) => {
+      if (channel !== 'notification') return;
+      try {
+        const data = JSON.parse(message);
+        const targetSocketId = this.clients.get(data.receiver_id);
+        if (targetSocketId) {
+          this.server.to(targetSocketId).emit('receiveNotification', data);
+        }
+      } catch (e) {
+        console.error('Failed to parse notification message', e);
+      }
     });
   }
 
@@ -90,45 +97,13 @@ export class NotificationGateway
   @SubscribeMessage('sendNotification')
   async handleNotification(@MessageBody() data: any) {
     console.log(`Received notification: ${JSON.stringify(data)}`);
-    // Broadcast notification to all clients
-    // this.server.emit('receiveNotification', data);
-
-    // Emit notification to specific client
-    const targetSocketId = this.clients.get(data.userId);
+    const targetSocketId = this.clients.get(data.userId || data.receiver_id);
     if (targetSocketId) {
       await this.redisPubClient.publish('notification', JSON.stringify(data));
-
-      // console.log(`Notification sent to user ${data.userId}`);
     } else {
       // console.log(`User ${data.userId} not connected`);
     }
   }
 
-  @SubscribeMessage('createNotification')
-  create(@MessageBody() createNotificationDto: CreateNotificationDto) {
-    return this.notificationService.create(createNotificationDto);
-  }
-
-  @SubscribeMessage('findAllNotification')
-  findAll() {
-    return this.notificationService.findAll();
-  }
-
-  @SubscribeMessage('findOneNotification')
-  findOne(@MessageBody() id: number) {
-    return this.notificationService.findOne(id);
-  }
-
-  @SubscribeMessage('updateNotification')
-  update(@MessageBody() updateNotificationDto: UpdateNotificationDto) {
-    return this.notificationService.update(
-      updateNotificationDto.id,
-      updateNotificationDto,
-    );
-  }
-
-  @SubscribeMessage('removeNotification')
-  remove(@MessageBody() id: number) {
-    return this.notificationService.remove(id);
-  }
+  // Socket-side CRUD handlers removed; use REST endpoints instead.
 }
