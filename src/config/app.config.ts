@@ -60,6 +60,14 @@ export default () => ({
       app_secret: process.env.GOOGLE_APP_SECRET,
       callback: process.env.GOOGLE_CALLBACK_URL,
     },
+    apple: {
+      client_id: process.env.APPLE_CLIENT_ID,
+      team_id: process.env.APPLE_TEAM_ID,
+      key_id: process.env.APPLE_KEY_ID,
+      private_key: process.env.APPLE_PRIVATE_KEY,
+      callback: process.env.APPLE_CALLBACK_URL,
+      session_secret: process.env.SESSION_SECRET,
+    },
   },
 
   payment: {

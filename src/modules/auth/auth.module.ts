@@ -9,6 +9,7 @@ import appConfig from '../../config/app.config';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../../mail/mail.module';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { AppleLoginStrategy } from './strategies/apple.strategy';
 
 @Module({
   imports: [
@@ -27,7 +28,13 @@ import { GoogleStrategy } from './strategies/google.strategy';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy, GoogleStrategy],
+  providers: [
+    AuthService,
+    LocalStrategy,
+    JwtStrategy,
+    GoogleStrategy,
+    AppleLoginStrategy,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}
