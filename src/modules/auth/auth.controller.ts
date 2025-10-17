@@ -25,6 +25,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import appConfig from '../../config/app.config';
 import { AuthGuard } from '@nestjs/passport';
+import { AppleAuthGuard } from './guards/apple-auth.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -165,6 +166,8 @@ export class AuthController {
     }
   }
 
+  // google login
+  @ApiOperation({ summary: 'Google login' })
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleLogin(): Promise<any> {
@@ -173,11 +176,44 @@ export class AuthController {
 
   @Get('google/redirect')
   @UseGuards(AuthGuard('google'))
-  async googleLoginRedirect(@Req() req: Request): Promise<any> {
-    return {
-      statusCode: HttpStatus.OK,
-      data: req.user,
-    };
+  async googleAuthRedirect(@Req() req, @Res() res: Response) {
+    const { user, loginResponse } = req.user;
+
+    // Now, return the JWT tokens and the user info
+    return res.json({
+      message: 'Logged in successfully via Google',
+      authorization: loginResponse.authorization,
+      user: {
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        avatar: user.avatar,
+      },
+    });
+  }
+
+  // apple login
+  @Get('apple')
+  @UseGuards(AppleAuthGuard)
+  async appleAuth(@Req() req) {
+    return HttpStatus.OK;
+  }
+
+  @Get('apple/redirect')
+  @UseGuards(AppleAuthGuard)
+  async appleAuthRedirect(@Req() req, @Res() res: Response) {
+    const { user, loginResponse } = req.user;
+
+    return res.json({
+      message: 'Logged in successfully via Apple',
+      authorization: loginResponse.authorization,
+      user: {
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        avatar: user.avatar,
+      },
+    });
   }
 
   // update user

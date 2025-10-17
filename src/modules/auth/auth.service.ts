@@ -131,7 +131,6 @@ export class AuthService {
 
           data.avatar = mediaUrl;
           console.log('Avatar uploaded to:', mediaUrl);
-          
         } catch (e) {
           console.warn('Avatar upload failed:', e?.message || e);
         }
@@ -291,6 +290,121 @@ export class AuthService {
         success: false,
         message: error.message,
       };
+    }
+  }
+
+  // google log in using passport.js
+  async googleLogin({ email, userId }: { email: string; userId: string }) {
+    try {
+      const payload = { email: email, sub: userId };
+
+      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+      const user = await UserRepository.getUserDetails(userId);
+
+      await this.redis.set(
+        `refresh_token:${user.id}`,
+        refreshToken,
+        'EX',
+        60 * 60 * 24 * 7,
+      );
+
+      // create stripe customer account id
+      try {
+        const stripeCustomer = await StripePayment.createCustomer({
+          user_id: user.id,
+          email: user.email,
+          name: `${user.first_name} ${user.last_name}`,
+        });
+
+        if (stripeCustomer) {
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: { billing_id: stripeCustomer.id },
+          });
+        }
+      } catch (error) {
+        return {
+          success: false,
+          message: 'User created but failed to create billing account',
+        };
+      }
+
+      return {
+        message: 'Logged in successfully',
+        authorization: {
+          type: 'bearer',
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        },
+        type: user.type,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  }
+
+  // apple log in using passport.js
+  async appleLogin({
+    email,
+    userId,
+    aud,
+  }: {
+    email: string;
+    userId: string;
+    aud: string;
+  }) {
+    try {
+      const payload = { email, sub: userId, aud };
+
+      const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+      const user = await UserRepository.getUserDetails(userId);
+
+      await this.redis.set(
+        `refresh_token:${user.id}`,
+        refreshToken,
+        'EX',
+        60 * 60 * 24 * 7,
+      );
+
+      // create stripe customer account id
+      try {
+        const stripeCustomer = await StripePayment.createCustomer({
+          user_id: user.id,
+          email: user.email,
+          name: `${user.first_name} ${user.last_name}`,
+        });
+
+        if (stripeCustomer) {
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: { billing_id: stripeCustomer.id },
+          });
+        }
+      } catch (error) {
+        return {
+          success: false,
+          message: 'User created but failed to create billing account',
+        };
+      }
+
+      return {
+        message: 'Logged in successfully',
+        authorization: {
+          type: 'bearer',
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        },
+        type: user.type,
+      };
+    } catch (error) {
+      return { success: false, message: error.message };
     }
   }
 
