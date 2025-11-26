@@ -118,10 +118,56 @@ export class FirebaseStorageService {
 
   async getFileSignedUrl(path: string, expiresInSeconds = 3600) {
     const bucket = this.storage().bucket(this.bucketName);
-    const file = bucket.file(path);
-    const [exists] = await file.exists();
-    if (!exists) return null;
-    const [url] = await file.getSignedUrl({ action: 'read', expires: Date.now() + expiresInSeconds * 1000 });
-    return { url };
+    // Try the provided path, and a trimmed-leading-slash variant if needed
+    let file = bucket.file(path);
+    let exists = false;
+    // We'll capture any exists-check error to inform fallback behavior
+    let existsCheckError: any = null;
+    try {
+      const resp = await file.exists();
+      exists = Array.isArray(resp) ? resp[0] : !!resp;
+    } catch (e) {
+      existsCheckError = e;
+      this.logger.warn(`getFileSignedUrl.exists check failed for path=${path}: ${e?.message || e}`);
+      exists = false;
+    }
+
+    // Try alternate trimmed path if object wasn't found
+    if (!exists) {
+      const altPath = path.startsWith('/') ? path.slice(1) : path.replace(/^\.\//, '');
+      if (altPath !== path) {
+        try {
+          const altFile = bucket.file(altPath);
+          const resp2 = await altFile.exists();
+          const altExists = Array.isArray(resp2) ? resp2[0] : !!resp2;
+          if (altExists) {
+            file = altFile;
+            path = altPath;
+            exists = true;
+          }
+        } catch (e) {
+          // If this also errors, capture for diagnostics but continue to attempts below
+          this.logger.warn(`getFileSignedUrl.altPath.exists check failed for altPath=${altPath}: ${e?.message || e}`);
+          if (!existsCheckError) existsCheckError = e;
+        }
+      }
+    }
+
+    // If exists check explicitly failed due to billing/permission, try to generate a signed URL
+    // or at least return a public fallback so clients can still attempt to fetch the object.
+    // This helps local dev or cases where the API cannot complete the 'exists' call.
+    try {
+      const [signedUrl] = await file.getSignedUrl({ action: 'read', expires: Date.now() + expiresInSeconds * 1000 });
+      return { url: signedUrl, source: 'signed' };
+    } catch (signedErr) {
+      this.logger.warn(`getFileSignedUrl.signedUrl failed for path=${path}: ${signedErr?.message || signedErr}`);
+      // Construct public fallback (may be inaccessible if object is private)
+      const publicUrl = `https://storage.googleapis.com/${this.bucketName}/${encodeURI(path)}`;
+      const result: any = { url: publicUrl, source: 'public-fallback' };
+      // Attach diagnostic info if available
+      if (existsCheckError) result.exists_check_error = String(existsCheckError?.message || existsCheckError);
+      result.signed_url_error = String(signedErr?.message || signedErr);
+      return result;
+    }
   }
 }

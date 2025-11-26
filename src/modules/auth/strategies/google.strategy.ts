@@ -63,6 +63,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
             byEmail.name ??
             (([firstName, lastName].filter(Boolean).join(' ').trim()) || null),
           avatar: byEmail.avatar ?? avatarUrl,
+          // mark email as verified for social login
+          email_verified_at: byEmail.email_verified_at ?? new Date(),
         };
 
         // Propose a username only if user doesn't have one
@@ -102,6 +104,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         last_name: lastName,
         name: [firstName, lastName].filter(Boolean).join(' ').trim() || null,
         avatar: avatarUrl,
+        // mark email as verified for social login
+        email_verified_at: new Date(),
       };
 
       const candidate = makeUsername();

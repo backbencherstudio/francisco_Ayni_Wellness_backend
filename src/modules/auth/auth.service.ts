@@ -113,6 +113,8 @@ export class AuthService {
             appConfig().storageUrl.avatar +
             `/${fileName}`;
 
+          console.log('mediaUrl', mediaUrl);
+
           // delete old image from storage only after successful upload
           const oldImage = await this.prisma.user.findFirst({
             where: { id: userId },
@@ -135,6 +137,9 @@ export class AuthService {
           console.warn('Avatar upload failed:', e?.message || e);
         }
       }
+
+      console.log('avatar url:', data.avatar);
+
       const user = await UserRepository.getUserDetails(userId);
       if (user) {
         await this.prisma.user.update({
@@ -534,31 +539,24 @@ export class AuthService {
         });
       }
 
-      // Generate verification token
-      const token = await UcodeRepository.createVerificationToken({
-        userId: user.data.id,
-        email: email,
-      });
+      // // Generate verification token
+      // const token = await UcodeRepository.createVerificationToken({
+      //   userId: user.data.id,
+      //   email: email,
+      // });
 
       // Send verification email with token
-      await this.mailService.sendVerificationLink({
-        email,
-        name: email,
-        token: token.token,
-        type: type,
-      });
+      // await this.mailService.sendVerificationLink({
+      //   email,
+      //   name: email,
+      //   token: token.token,
+      //   type: type,
+      // });
 
       // New users will not have subscription yet; signal requirement
       return {
         success: true,
-        message: 'We have sent a verification link to your email',
-        subscription_active: false,
-        subscription_required: true,
-        redirect: '/subscription',
-        trial_active: false,
-        trial_days_remaining: 0,
-        trial_ends_at: null,
-        trial_available: true,
+        message: 'Registered successfully',
       };
     } catch (error) {
       return {

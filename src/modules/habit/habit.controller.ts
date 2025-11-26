@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { HabitService } from './habit.service';
 import { CreateHabitDto } from './dto/create-habit.dto';
@@ -61,9 +62,19 @@ export class HabitController {
     return this.habitService.completeHabit(user.userId, id, completeHabitDto);
   }
 
-  @ApiOperation({ summary: 'Habit history (logs) for last N days' })
+  @ApiOperation({ summary: 'Habit history (logs) for last N days; use ?all=1 for all-time or ?days=N' })
   @Get(':id/history')
-  async history(@GetUser() user, @Param('id') id: string) {
+  async history(
+    @GetUser() user,
+    @Param('id') id: string,
+    @Query('days') days?: string,
+    @Query('all') all?: string,
+  ) {
+    if (all === '1' || all === 'true') return this.habitService.habitHistory(user.userId, id, 0);
+    if (days) {
+      const n = parseInt(days, 10);
+      if (!Number.isNaN(n)) return this.habitService.habitHistory(user.userId, id, n);
+    }
     return this.habitService.habitHistory(user.userId, id);
   }
 

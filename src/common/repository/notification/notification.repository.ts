@@ -30,39 +30,43 @@ export class NotificationRepository {
       | 'blog';
     entity_id?: string;
   }) {
-    const notificationEventData = {};
-    if (type) {
-      notificationEventData['type'] = type;
-    }
-    if (text) {
-      notificationEventData['text'] = text;
-    }
-    const notificationEvent = await prisma.notificationEvent.create({
-      data: {
-        type: type,
-        text: text,
-        ...notificationEventData,
-      },
-    });
-
-    const notificationData = {};
-    if (sender_id) {
-      notificationData['sender_id'] = sender_id;
-    }
+    // If a receiver_id was provided, ensure the user exists. If not, treat as broadcast (null receiver).
+    let finalReceiverId = null;
     if (receiver_id) {
-      notificationData['receiver_id'] = receiver_id;
-    }
-    if (entity_id) {
-      notificationData['entity_id'] = entity_id;
+      const user = await prisma.user.findUnique({ where: { id: receiver_id } });
+      if (user) {
+        finalReceiverId = receiver_id;
+      } else {
+        // invalid receiver id provided; log and continue creating a broadcast notification
+        finalReceiverId = null;
+      }
     }
 
-    const notification = await prisma.notification.create({
-      data: {
-        notification_event_id: notificationEvent.id,
-        ...notificationData,
+    // Build payloads
+    const eventData: any = {};
+    if (type) eventData.type = type;
+    if (text) eventData.text = text;
+
+    const notificationData: any = {
+      notification_event: {
+        create: eventData,
       },
+    };
+
+    // For nested writes Prisma expects relation objects (connect) rather than raw foreign keys
+    if (sender_id) notificationData.sender = { connect: { id: sender_id } };
+    if (finalReceiverId) notificationData.receiver = { connect: { id: finalReceiverId } };
+    if (entity_id) notificationData.entity_id = entity_id;
+
+    // Create both event and notification in a transaction so we don't leave orphaned events
+    const created = await prisma.$transaction(async (tx) => {
+      const createdNotification = await tx.notification.create({
+        data: notificationData,
+        include: { notification_event: true },
+      });
+      return createdNotification;
     });
 
-    return notification;
+    return created;
   }
 }

@@ -234,6 +234,7 @@ export class AuthController {
     try {
       const user_id = req.user.userId;
       const response = await this.authService.updateUser(user_id, data, image);
+      console.log('image from CTrl', image);
       return response;
     } catch (error) {
       return {
