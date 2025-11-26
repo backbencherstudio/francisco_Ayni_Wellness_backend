@@ -3,6 +3,7 @@ import { HomeService } from './home.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { SkipSubscription } from '../../common/decorator/skip-subscription.decorator';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @ApiTags('Home')
 @UseGuards(JwtAuthGuard)
@@ -13,8 +14,8 @@ export class HomeController {
 
   @Get('today')
   @ApiOperation({ summary: "Today's progress summary" })
-  async today(@Req() req: any): Promise<any> {
-    const userId = req.user?.userId || req.user?.id;
+  async today(@GetUser() user): Promise<any> {
+    const userId = user?.userId || user?.id;
     return this.homeService.today(userId);
   }
 }

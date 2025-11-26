@@ -28,7 +28,9 @@ export class UcodeRepository {
       if (isOtp) {
         // create 6 digit otp code
         // token = String(Math.floor(100000 + Math.random() * 900000));
-        token = String(randomInt(100000, 1000000));
+
+        // create 4 digit otp code
+        token = String(Math.floor(1000 + Math.random() * 9000));
       } else {
         token = uuid();
       }
@@ -113,11 +115,11 @@ export class UcodeRepository {
 
           if (data) {
             // delete this token
-            await prisma.ucode.delete({
-              where: {
-                id: data.id,
-              },
-            });
+            // await prisma.ucode.delete({
+            //   where: {
+            //     id: data.id,
+            //   },
+            // });
             return true;
           } else {
             return false;

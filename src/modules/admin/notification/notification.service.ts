@@ -34,6 +34,7 @@ export class NotificationService {
           receiver_id: true,
           entity_id: true,
           created_at: true,
+          read_at: true,
           sender: {
             select: {
               id: true,
@@ -60,9 +61,11 @@ export class NotificationService {
         },
       });
 
-      // add url to avatar
+      // add url to avatar and computed is_read flag
       if (notifications.length > 0) {
         for (const notification of notifications) {
+          // computed flag for frontend convenience
+          notification['is_read'] = !!notification.read_at;
           if (notification.sender && notification.sender.avatar) {
             notification.sender['avatar_url'] = SazedStorage.url(
               appConfig().storageUrl.avatar + notification.sender.avatar,
@@ -121,6 +124,30 @@ export class NotificationService {
         success: false,
         message: error.message,
       };
+    }
+  }
+
+  /**
+   * Mark a notification as read for a user
+   */
+  async markAsRead(id: string, user_id: string) {
+    try {
+      const notification = await this.prisma.notification.findUnique({
+        where: { id },
+      });
+
+      if (!notification) {
+        return { success: false, message: 'Notification not found' };
+      }
+
+      await this.prisma.notification.update({
+        where: { id },
+        data: { read_at: new Date() },
+      });
+
+      return { success: true, message: 'Notification marked as read' };
+    } catch (error) {
+      return { success: false, message: error.message };
     }
   }
 

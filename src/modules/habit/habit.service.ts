@@ -17,7 +17,10 @@ export class HabitService {
 
   // --- Helpers -----------------------------------------------------------
   private dayBucket(date: Date) {
-    return startOfDay(date);
+    // Use UTC midnight as the canonical "day" boundary so all services
+    // interpret a given day the same regardless of server timezone.
+    // This returns a Date at 00:00:00.000Z for the provided date's UTC day.
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   }
   private prismaAny() {
     return this.prisma as any;
@@ -62,6 +65,8 @@ export class HabitService {
           frequency: createHabitDto.frequency as unknown as $Enums.Frequency,
           duration: createHabitDto.duration,
           user: { connect: { id: userId } },
+          created_at: new Date(),
+          updated_at: new Date(),
         },
       });
 
@@ -167,7 +172,16 @@ export class HabitService {
   async habitHistory(userId: string, habitId: string, days = 30) {
     const prismaAny: any = this.prisma as any;
 
-    const from = subDays(new Date(), days - 1); // inclusive
+    // If days <= 0, treat as "all-time" (no date filter)
+    if (typeof days === 'number' && days <= 0) {
+      const logs = await prismaAny.habitLog.findMany({
+        where: { user_id: userId, habit_id: habitId },
+        orderBy: { day: 'asc' },
+      });
+      return { success: true, habit_id: habitId, days: 0, logs };
+    }
+
+    const from = subDays(new Date(), (days as number) - 1); // inclusive
 
     const logs = await prismaAny.habitLog.findMany({
       where: {
@@ -234,23 +248,34 @@ export class HabitService {
 
     if (hard) {
       // Remove any centralized reminders tied to this habit to avoid FK issues and stray schedules
-      await (this.prisma as any).reminders.deleteMany({ where: { habit_id: habitId } });
+      await (this.prisma as any).reminders.deleteMany({
+        where: { habit_id: habitId },
+      });
       await this.prisma.habit.delete({
         where: {
           id: habitId,
         },
       });
 
-      return { success: true, message: 'Habit permanently deleted and reminders removed' };
+      return {
+        success: true,
+        message: 'Habit permanently deleted and reminders removed',
+      };
     }
 
     // On soft delete, also remove reminders so the scheduler stops triggering
-    await (this.prisma as any).reminders.deleteMany({ where: { habit_id: habitId } });
+    await (this.prisma as any).reminders.deleteMany({
+      where: { habit_id: habitId },
+    });
     const soft = await this.prisma.habit.update({
       where: { id: habitId },
       data: { deleted_at: new Date(), status: 0, updated_at: new Date() },
     });
-    return { success: true, message: 'Habit deleted (soft) and reminders removed', habit: soft };
+    return {
+      success: true,
+      message: 'Habit deleted (soft) and reminders removed',
+      habit: soft,
+    };
   }
 
   // ---------------- Today's Habits -------------------------------------
@@ -277,6 +302,7 @@ export class HabitService {
   async getTodayHabits(userId: string) {
     if (!userId) throw new BadRequestException('User required');
     const today = this.dayBucket(new Date());
+    console.log('today date:', today);
 
     const habits = await this.prisma.habit.findMany({
       where: { user_id: userId, deleted_at: null, status: 1 },

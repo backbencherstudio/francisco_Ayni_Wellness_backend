@@ -15,7 +15,7 @@ export type NotificationType =
 
 interface CreateAndDispatchInput {
   sender_id?: string;
-  receiver_id: string;
+  receiver_id?: string | null;
   text: string;
   type?: NotificationType;
   entity_id?: string;
@@ -43,11 +43,11 @@ export class NotificationService {
     });
     const payload = {
       id: n.id,
-      receiver_id: input.receiver_id,
-      sender_id: input.sender_id,
+      receiver_id: n.receiver_id ?? null,
+      sender_id: input.sender_id ?? null,
       text: input.text,
       type: input.type,
-      entity_id: input.entity_id,
+      entity_id: input.entity_id ?? null,
       created_at: new Date().toISOString(),
     };
     await this.pub.publish('notification', JSON.stringify(payload));

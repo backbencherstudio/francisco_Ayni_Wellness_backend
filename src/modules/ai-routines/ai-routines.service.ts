@@ -334,10 +334,16 @@ export class AiRoutinesService {
     const items = await Promise.all(
       routine.items.map(async (it: any) => {
         if (it.gcs_path) {
-          const url = await this.gcs
-            .getFileSignedUrl(it.gcs_path)
-            .catch(() => null);
-          return { ...it, signed_url: url?.url || null };
+          const url = await this.gcs.getFileSignedUrl(it.gcs_path).catch((e) => {
+            // keep diagnostics in storage service; return null on error
+            return null;
+          });
+          return {
+            ...it,
+            url: url?.url || null,
+            signed_url: url?.url || null,
+            url_source: url?.source || null,
+          };
         }
         return it;
       }),
