@@ -17,10 +17,9 @@ export class HabitService {
 
   // --- Helpers -----------------------------------------------------------
   private dayBucket(date: Date) {
-    // Use UTC midnight as the canonical "day" boundary so all services
-    // interpret a given day the same regardless of server timezone.
-    // This returns a Date at 00:00:00.000Z for the provided date's UTC day.
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    return new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
   }
   private prismaAny() {
     return this.prisma as any;
