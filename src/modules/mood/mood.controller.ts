@@ -16,10 +16,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { SkipSubscription } from '../../common/decorator/skip-subscription.decorator';
 import { EMOTIONS, EMOTION_CONFIG_VERSION } from './emotion.config';
-import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
+// import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
 
 @Controller('mood')
-@UseGuards(JwtAuthGuard, SubscriptionGuard)
+@UseGuards(JwtAuthGuard)
 export class MoodController {
   constructor(private readonly moodService: MoodService) {}
 

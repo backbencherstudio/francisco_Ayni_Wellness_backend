@@ -35,7 +35,11 @@ export class SazedStorage {
    */
   public static disk(disk: DiskType): StorageClass {
     if (!this._config) {
-      throw new Error('SazedStorage not configured. Call SazedStorage.config() in bootstrap.');
+      const path = require('path');
+      this._config = ({
+        driver: 'local',
+        connection: { rootUrl: path.join(process.cwd(), 'public', 'storage'), publicUrl: '/storage' },
+      } as unknown) as DiskOption;
     }
     this._config.driver = disk;
     return this.storageDisk();
@@ -94,27 +98,49 @@ export class SazedStorage {
    * @returns
    */
   private static storageDisk() {
+    // defensive guard: if config missing, fallback to local storage
     if (!this._config) {
-      throw new Error('SazedStorage not configured. Call SazedStorage.config() in bootstrap.');
+      const path = require('path');
+      this._config = ({
+        driver: 'local',
+        connection: { rootUrl: path.join(process.cwd(), 'public', 'storage'), publicUrl: '/storage' },
+      } as unknown) as DiskOption;
+      console.warn('SazedStorage: no storage config found, falling back to local ./public/storage');
     }
-    const driver: string = this._config.driver as any;
+
+    const driver: string = this._config.driver;
     const config: DiskOption = this._config;
+
+    // helpful debug logging to show which driver/endpoint will be used
+    try {
+      const cfgLog: any = {
+        driver: driver,
+      };
+      if (driver === 's3' && config.connection) {
+        cfgLog.endpoint = (config.connection as any).awsEndpoint || null;
+        cfgLog.bucket = (config.connection as any).awsBucket || null;
+        cfgLog.minio = !!(config.connection as any).minio;
+      } else if (driver === 'local' && config.connection) {
+        cfgLog.rootUrl = config.connection.rootUrl;
+        cfgLog.publicUrl = config.connection.publicUrl;
+      }
+      // do not spam logs in production; this is a short informative log at startup
+      console.log('SazedStorage config:', cfgLog);
+    } catch (err) {
+      // ignore logging errors
+    }
 
     let driverAdapter: IStorage;
     switch (driver) {
-      // for local filesystem
-      case 'local':
-        driverAdapter = new LocalAdapter(config);
-        break;
-
       case 's3':
         driverAdapter = new S3Adapter(config);
         break;
-
+      case 'local':
       default:
         driverAdapter = new LocalAdapter(config);
         break;
     }
+
     return new StorageClass(driverAdapter);
   }
 }

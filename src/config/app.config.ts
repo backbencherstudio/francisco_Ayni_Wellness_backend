@@ -10,13 +10,20 @@ export default () => ({
   fileSystems: {
     public: {},
     s3: {
-      driver: 's3',
+      bucket: process.env.AWS_S3_BUCKET,
       key: process.env.AWS_ACCESS_KEY_ID,
       secret: process.env.AWS_SECRET_ACCESS_KEY,
-      region: process.env.AWS_DEFAULT_REGION,
-      bucket: process.env.AWS_BUCKET,
-      url: process.env.AWS_URL,
-      endpoint: process.env.AWS_ENDPOINT,
+      region: process.env.AWS_REGION,
+      endpoint: process.env.AWS_S3_ENDPOINT,
+      forcePathStyle: process.env.AWS_S3_FORCE_PATH_STYLE === 'true',
+    },
+    minio: {
+      bucket: process.env.MINIO_BUCKET,
+      endpoint: process.env.MINIO_ENDPOINT,
+      accessKey: process.env.MINIO_ACCESS_KEY,
+      secretKey: process.env.MINIO_SECRET_KEY,
+      port: process.env.MINIO_PORT,
+      useSSL: process.env.MINIO_USE_SSL === 'true',
     },
     gcs: {
       driver: 'gcs',
@@ -26,7 +33,6 @@ export default () => ({
       bucket: process.env.GCP_BUCKET,
     },
   },
-
   database: {
     url: process.env.DATABASE_URL,
   },
@@ -82,22 +88,20 @@ export default () => ({
     },
   },
 
-  /**
+   /**
    * Storage directory
    */
   storageUrl: {
     rootUrl: './public/storage',
     rootUrlPublic: '/public/storage',
-    package: '/package',
-    destination: '/destination',
-    blog: '/blog',
-    avatar: '/avatar/',
-    websiteInfo: '/website-info',
-    attachment: '/attachment',
-    communityVideo: '/community/video',
-    communityPhoto: '/community/photo',
-    communityDocument: '/community/document',
-    media: '/media',
+    package: 'package',
+    destination: 'destination',
+    blog: 'blog',
+    avatar: 'avatar',
+    video: 'video',
+    photo: 'photo',
+    websiteInfo: 'website-info',
+    attachment: 'attachment',
   },
 
   defaultUser: {

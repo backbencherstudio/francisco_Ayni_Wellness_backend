@@ -32,14 +32,14 @@ model Account {
 }
 
 model User {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id           String    @id @default(cuid())
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @default(now())
   approved_at  DateTime?
   availability String?
 
-  apple_id   String? @unique
-  google_id  String? @unique
+  apple_id  String? @unique
+  google_id String? @unique
 
   email      String? @unique
   username   String? @unique
@@ -82,19 +82,19 @@ model User {
   receiver_notifications    Notification[] @relation("receiver")
   sender_notifications      Notification[] @relation("sender")
 
-  user_payment_methods UserPaymentMethod[]
-  user_settings        UserSetting[]
-  ucodes               Ucode[]
-  roles                Role[]
-  role_users           RoleUser[]
-  payment_transactions PaymentTransaction[]
-  subscriptions        Subscription[]
-  Habit                Habit[]
-  Mood                 Mood[]
-  statistics           Statistics[]
-  Reminders            Reminders[]
-  Inspiration          Inspiration[]
-  mood_entries         MoodEntry[]
+  user_payment_methods  UserPaymentMethod[]
+  user_settings         UserSetting[]
+  ucodes                Ucode[]
+  roles                 Role[]
+  role_users            RoleUser[]
+  payment_transactions  PaymentTransaction[]
+  subscriptions         Subscription[]
+  Habit                 Habit[]
+  Mood                  Mood[]
+  statistics            Statistics[]
+  Reminders             Reminders[]
+  Inspiration           Inspiration[]
+  mood_entries          MoodEntry[]
   mood_daily_aggregates MoodDailyAggregate[]
   habit_logs            HabitLog[]
   support_tickets       SupportTicket[]
@@ -102,6 +102,7 @@ model User {
   routine_profile       UserRoutineProfile?
   routines              Routine[]
   routine_mood_checks   RoutineMoodCheck[]
+  paymentMethods        PaymentMethod[]
 
   @@map("users")
 }
@@ -128,9 +129,9 @@ model Ucode {
 }
 
 model Role {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
 
   status Int?    @default(1) @db.SmallInt
   title  String?
@@ -244,17 +245,6 @@ model UserPaymentMethod {
 
   payment_method_id String?
   checkout_id       String?
-  // Added detailed card / wallet metadata for displaying in subscription screens
-  brand             String? // e.g. visa, mastercard
-  last4             String? // last 4 digits
-  exp_month         Int?
-  exp_year          Int?
-  funding           String? // credit, debit, prepaid
-  method_type       String? // card | wallet | bank
-  is_default        Boolean? @default(false)
-
-  // reverse relation: a payment method can have many subscriptions over time
-  subscriptions Subscription[]
 
   @@map("user_payment_methods")
 }
@@ -285,45 +275,185 @@ model PaymentTransaction {
   @@map("payment_transactions")
 }
 
-// Subscription model
+enum Interval {
+  MONTH
+  YEAR
+}
 
-model Subscription {
+model SubsPlan {
+  id                String  @id @default(cuid())
+  name              String
+  slug              String  @unique // free, premium_monthly, premium_yearly
+  description       String?
+  price_description String?
+
+  // Billing details
+  isFree        Boolean   @default(false)
+  price         Int?
+  currency      String?
+  interval      Interval?
+  intervalCount Int?
+
+  // Stripe
+  stripeProductId String?
+  stripePriceId   String?
+
+  // Trial (for free plan)
+  trialDays Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model PaymentMethod {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
-  user_id String?
-  user    User?   @relation(fields: [user_id], references: [id])
+  status            Int?    @default(1) @db.SmallInt
+  type              String?
+  brand             String?
+  last4             String?
+  exp_month         Int?
+  exp_year          Int?
+  cardholder_name   String?
+  payment_method_id String
 
-  plan_name   String?
-  description String?
-  plan_id     String?
-  price       Decimal?
-  currency    String?
-  interval    String? // e.g. month, year
+  sort_order Int? @default(0)
 
-  status                 String?            @default("active")
-  start_date             DateTime?
-  end_date               DateTime?
-  cancel_at_end          Boolean?           @default(false)
-  canceled_at            DateTime?
-  trial_start            DateTime?
-  trial_end              DateTime?
-  subscription_id        String? // e.g. stripe subscription id
-  next_billing_date      DateTime? // mirrors Stripe current_period_end for display
-  // Linked payment method snapshot (denormalized for historical accuracy)
-  payment_method_id      String? // stripe payment_method id
-  payment_method_brand   String?
-  payment_method_last4   String?
-  payment_method_funding String?
-  payment_method_type    String? // card | wallet
-  user_payment_method_id String? // relation to stored payment method
-  user_payment_method    UserPaymentMethod? @relation(fields: [user_payment_method_id], references: [id])
+  user_id String
+  user    User?  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@unique([subscription_id])
+  @@map("payment_methods")
+}
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String
+
+  planId String
+  plan   SubsPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  // Required for tracking
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+  trialEndsAt DateTime?
+  status      String?
+
+  // Stripe subscription
+  stripeSubId String?
+
+  // Auto-renew
+  isActive          Boolean @default(true)
+  cancelAtPeriodEnd Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+
   @@map("subscriptions")
 }
+
+enum SubscriptionPlan {
+  FREE
+  PREMIUM_MONTHLY
+  PREMIUM_YEARLY
+}
+
+// model UserPaymentMethod {
+//   id         String    @id @default(cuid())
+//   created_at DateTime  @default(now())
+//   updated_at DateTime  @default(now())
+//   deleted_at DateTime?
+
+//   user_id String?
+//   user    User?   @relation(fields: [user_id], references: [id])
+
+//   payment_method_id String?
+//   checkout_id       String?
+//   // Added detailed card / wallet metadata for displaying in subscription screens
+//   brand             String? // e.g. visa, mastercard
+//   last4             String? // last 4 digits
+//   exp_month         Int?
+//   exp_year          Int?
+//   funding           String? // credit, debit, prepaid
+//   method_type       String? // card | wallet | bank
+//   is_default        Boolean? @default(false)
+
+//   // reverse relation: a payment method can have many subscriptions over time
+//   subscriptions Subscription[]
+
+//   @@map("user_payment_methods")
+// }
+
+// model PaymentTransaction {
+//   id         String    @id @default(cuid())
+//   created_at DateTime  @default(now())
+//   updated_at DateTime  @default(now())
+//   deleted_at DateTime?
+
+//   store_id String?
+
+//   user_id String?
+//   user    User?   @relation(fields: [user_id], references: [id])
+
+//   order_id         String?
+//   type             String?  @default("order")
+//   withdraw_via     String?  @default("wallet")
+//   provider         String?
+//   reference_number String?
+//   status           String?  @default("pending")
+//   raw_status       String?
+//   amount           Decimal?
+//   currency         String?
+//   paid_amount      Decimal?
+//   paid_currency    String?
+
+//   @@map("payment_transactions")
+// }
+
+// // Subscription model
+
+// model Subscription {
+//   id         String    @id @default(cuid())
+//   created_at DateTime  @default(now())
+//   updated_at DateTime  @default(now())
+//   deleted_at DateTime?
+
+//   user_id String?
+//   user    User?   @relation(fields: [user_id], references: [id])
+
+//   plan_name   String?
+//   description String?
+//   plan_id     String?
+//   price       Decimal?
+//   currency    String?
+//   interval    String? // e.g. month, year
+
+//   status                 String?            @default("active")
+//   start_date             DateTime?
+//   end_date               DateTime?
+//   cancel_at_end          Boolean?           @default(false)
+//   canceled_at            DateTime?
+//   trial_start            DateTime?
+//   trial_end              DateTime?
+//   subscription_id        String? // e.g. stripe subscription id
+//   next_billing_date      DateTime? // mirrors Stripe current_period_end for display
+//   // Linked payment method snapshot (denormalized for historical accuracy)
+//   payment_method_id      String? // stripe payment_method id
+//   payment_method_brand   String?
+//   payment_method_last4   String?
+//   payment_method_funding String?
+//   payment_method_type    String? // card | wallet
+//   user_payment_method_id String? // relation to stored payment method
+//   user_payment_method    UserPaymentMethod? @relation(fields: [user_payment_method_id], references: [id])
+
+//   @@unique([subscription_id])
+//   @@map("subscriptions")
+// }
 
 model Habit {
   id         String    @id @default(cuid())
@@ -345,9 +475,9 @@ model Habit {
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-    statistics Statistics[] @relation("HabitStatistics")
-    Reminders  Reminders[]
-    logs       HabitLog[]
+  statistics Statistics[] @relation("HabitStatistics")
+  Reminders  Reminders[]
+  logs       HabitLog[]
 
   @@map("habits")
 }
@@ -384,17 +514,17 @@ model Reminders {
   habit_id String?
   habit    Habit?  @relation(fields: [habit_id], references: [id])
 
-  routine_id  String?
-  routine     Routine? @relation(fields: [routine_id], references: [id], onDelete: Cascade)
+  routine_id String?
+  routine    Routine? @relation(fields: [routine_id], references: [id], onDelete: Cascade)
 
   name   String?
   time   String?
   days   String? // e.g. "Mon,Tue,Wed"
   active Boolean? @default(true)
 
-  scheduled_at DateTime?
-  window String?
-  tz String?
+  scheduled_at      DateTime?
+  window            String?
+  tz                String?
   last_triggered_at DateTime?
 
   @@map("reminders")
@@ -402,15 +532,15 @@ model Reminders {
 
 // Logs each time a user completes a habit (one per habit per day by default)
 model HabitLog {
-  id            String   @id @default(cuid())
-  created_at    DateTime @default(now())
-  updated_at    DateTime @default(now())
-  user_id       String
-  habit_id      String
-  day           DateTime // UTC day bucket (startOfDay UTC)
-  completed_at  DateTime @default(now())
+  id               String   @id @default(cuid())
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now())
+  user_id          String
+  habit_id         String
+  day              DateTime // UTC day bucket (startOfDay UTC)
+  completed_at     DateTime @default(now())
   duration_minutes Int?
-  note          String?  @db.VarChar(500)
+  note             String?  @db.VarChar(500)
 
   user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
   habit Habit @relation(fields: [habit_id], references: [id], onDelete: Cascade)
@@ -423,9 +553,9 @@ model HabitLog {
 }
 
 model Mood {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
 
   status Int?    @default(1) @db.SmallInt
   mood   String?
@@ -513,27 +643,27 @@ model Inspiration {
 // ================= Mood Tracking (new implementation) =================
 
 model MoodEntry {
-  id              String    @id @default(cuid())
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @default(now())
-  deleted_at      DateTime?
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
 
   user_id String
-  user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  score   Int      // 1-10 overall mood rating
-  emotions String[] 
-  note    String?   @db.VarChar(1000)
+  score    Int // 1-10 overall mood rating
+  emotions String[]
+  note     String?  @db.VarChar(1000)
 
   // AI enrichment (optional)
-  ai_summary     String?   @db.VarChar(300)
-  ai_suggestions String?   
+  ai_summary     String? @db.VarChar(300)
+  ai_suggestions String?
   ai_model       String?
   ai_tokens_in   Int?
   ai_tokens_out  Int?
   ai_error       String?
 
-  sentiment_score Float?    
+  sentiment_score Float?
   energy_score    Float?
 
   @@index([user_id, created_at])
@@ -541,17 +671,17 @@ model MoodEntry {
 }
 
 model MoodDailyAggregate {
-  id            String    @id @default(cuid())
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @default(now())
-  user_id String
-  user    User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  date        DateTime    // UTC midnight representing user's local date bucket
-  count_entries Int       @default(0)
-  avg_score     Float     @default(0)
-  min_score     Int       @default(0)
-  max_score     Int       @default(0)
+  date          DateTime // UTC midnight representing user's local date bucket
+  count_entries Int      @default(0)
+  avg_score     Float    @default(0)
+  min_score     Int      @default(0)
+  max_score     Int      @default(0)
   emotions_top  String[]
   last_entry_id String?
 
@@ -671,11 +801,11 @@ model Contact {
 
 // Support tickets submitted by users (in-app contact support)
 model SupportTicket {
-  id          String   @id @default(cuid())
-  created_at  DateTime @default(now())
-  updated_at  DateTime @default(now())
+  id          String              @id @default(cuid())
+  created_at  DateTime            @default(now())
+  updated_at  DateTime            @default(now())
   user_id     String?
-  user        User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  user        User?               @relation(fields: [user_id], references: [id], onDelete: SetNull)
   email       String?
   description String
   status      SupportTicketStatus @default(OPEN)
@@ -764,39 +894,39 @@ enum RoutineItemStatus {
 }
 
 model UserRoutineProfile {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
 
   user_id String @unique
   user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   onboarding_completed_at DateTime?
-  preferences Json? // arbitrary user choices (duration, preferred types, times)
-  onboarding_version Int? @default(1)
+  preferences             Json? // arbitrary user choices (duration, preferred types, times)
+  onboarding_version      Int?      @default(1)
 
   @@map("user_routine_profiles")
 }
 
 model Routine {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
 
   user_id String
   user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  date       DateTime // calendar day for which this routine applies (UTC day bucket)
-  status     RoutineStatus @default(generated)
-  mood_entry_id String?
-  mood_check_id String?
-  mood_check    RoutineMoodCheck? @relation(fields: [mood_check_id], references: [id], onDelete: SetNull)
-  remind_at  DateTime?
-  completed_at DateTime?
-  notes      String?
+  date             DateTime // calendar day for which this routine applies (UTC day bucket)
+  status           RoutineStatus     @default(generated)
+  mood_entry_id    String?
+  mood_check_id    String?
+  mood_check       RoutineMoodCheck? @relation(fields: [mood_check_id], references: [id], onDelete: SetNull)
+  remind_at        DateTime?
+  completed_at     DateTime?
+  notes            String?
   profile_snapshot Json? // snapshot of preferences used for generation
 
-  items RoutineItem[]
+  items     RoutineItem[]
   Reminders Reminders[]
 
   @@unique([user_id, date])
@@ -805,22 +935,22 @@ model Routine {
 }
 
 model RoutineItem {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
 
   routine_id String
   routine    Routine @relation(fields: [routine_id], references: [id], onDelete: Cascade)
 
-  type       RoutineItemType
-  title      String?
-  description String?
-  gcs_path   String?    // path in Firebase Storage bucket
-  content_type String?   // audio | text | video
+  type         RoutineItemType
+  title        String?
+  description  String?
+  gcs_path     String? // path in Firebase Storage bucket
+  content_type String? // audio | text | video
   duration_min Int?
-  order      Int? @default(0)
+  order        Int?            @default(0)
 
-  status     RoutineItemStatus @default(pending)
+  status       RoutineItemStatus @default(pending)
   completed_at DateTime?
   journal_text String?
 
@@ -829,18 +959,18 @@ model RoutineItem {
 }
 
 model RoutineMoodCheck {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
 
   user_id String
-  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
   routine Routine[]
 
-  rating    Int?
-  emotions  String[]
+  rating     Int?
+  emotions   String[]
   statements String[]
-  note      String?   @db.VarChar(1000)
+  note       String?  @db.VarChar(1000)
 
   @@index([user_id, created_at])
   @@map("routine_mood_checks")

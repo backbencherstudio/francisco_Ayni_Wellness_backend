@@ -62,7 +62,7 @@ export class AiRoutinesService {
     if (med) {
       items.push({
         type: 'Meditation',
-        title: 'Guided Meditation',
+        title: 'Meditation',
         gcs_path: med.name,
         content_type: med.contentType || 'audio',
         duration_min: this.resolveDurationMinutesFromFile(med) ?? 10,
@@ -90,16 +90,29 @@ export class AiRoutinesService {
       content_type: 'text',
     });
 
-    // Podcast (random from 'podcast' folder)
-    const pod = await this.pickRandom('podcast');
-    if (pod) {
+    // Podcast (Try YouTube first, fallback to 'podcast' folder)
+    const youtubeVideo = await this.pickRandomYoutubeVideo();
+
+    if (youtubeVideo) {
       items.push({
         type: 'Podcast',
-        title: 'Mindful Listening',
-        gcs_path: pod.name,
-        content_type: pod.contentType || 'audio',
-        duration_min: this.resolveDurationMinutesFromFile(pod) ?? 10,
+        title: youtubeVideo.title,
+        gcs_path: `youtube:${youtubeVideo.videoId}`, // Store ID with prefix
+        content_type: 'video/youtube',
+        duration_min: 15, // Default duration
+        description: youtubeVideo.description,
       });
+    } else {
+      const pod = await this.pickRandom('podcast');
+      if (pod) {
+        items.push({
+          type: 'Podcast',
+          title: 'Podcast',
+          gcs_path: pod.name,
+          content_type: pod.contentType || 'audio',
+          duration_min: this.resolveDurationMinutesFromFile(pod) ?? 10,
+        });
+      }
     }
 
     // Fetch profile snapshot for future personalization/analytics
@@ -143,15 +156,47 @@ export class AiRoutinesService {
     return { success: true, routine };
   }
 
-
   private async pickRandom(prefix: string) {
     try {
       const files = await this.gcs.listPrefix(prefix);
-      const valid = (files || []).filter((f: any) => f && f.name && !f.name.endsWith('/'));
+      const valid = (files || []).filter(
+        (f: any) => f && f.name && !f.name.endsWith('/'),
+      );
       if (!valid.length) return null;
       const idx = Math.floor(Math.random() * valid.length);
       return valid[idx];
     } catch {
+      return null;
+    }
+  }
+
+  private async pickRandomYoutubeVideo() {
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    const playlistId = process.env.YOUTUBE_PLAYLIST_ID;
+
+    if (!apiKey || !playlistId) return null;
+
+    try {
+      // Fetch playlist items (max 50)
+      const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${apiKey}`;
+
+      const response = await fetch(url);
+      const data: any = await response.json();
+
+      if (!data.items || data.items.length === 0) return null;
+
+      // Pick random
+      const idx = Math.floor(Math.random() * data.items.length);
+      const item = data.items[idx];
+      const snippet = item.snippet;
+
+      return {
+        videoId: snippet.resourceId.videoId,
+        title: snippet.title,
+        description: snippet.description,
+      };
+    } catch (error) {
+      console.error('Error fetching YouTube playlist:', error);
       return null;
     }
   }
@@ -161,11 +206,14 @@ export class AiRoutinesService {
     const meta = file?.customMetadata || {};
     const getNum = (v: any) => (v == null ? undefined : Number(v));
     const fromMin = getNum(meta.duration_min);
-    if (!Number.isNaN(fromMin as any) && fromMin != null) return Math.max(1, Math.round(fromMin as number));
+    if (!Number.isNaN(fromMin as any) && fromMin != null)
+      return Math.max(1, Math.round(fromMin as number));
     const fromSec = getNum(meta.duration_sec);
-    if (!Number.isNaN(fromSec as any) && fromSec != null) return Math.max(1, Math.round((fromSec as number) / 60));
+    if (!Number.isNaN(fromSec as any) && fromSec != null)
+      return Math.max(1, Math.round((fromSec as number) / 60));
     const fromMs = getNum(meta.duration_ms);
-    if (!Number.isNaN(fromMs as any) && fromMs != null) return Math.max(1, Math.round((fromMs as number) / 60000));
+    if (!Number.isNaN(fromMs as any) && fromMs != null)
+      return Math.max(1, Math.round((fromMs as number) / 60000));
     // If contentType is audio/video and size is available, we cannot reliably infer duration without reading headers
     // so fall back to undefined and allow caller to default
     return undefined;
@@ -239,6 +287,19 @@ export class AiRoutinesService {
 
     const items = await Promise.all(
       routine.items.map(async (it: any) => {
+        // Handle YouTube items
+        if (
+          it.content_type === 'video/youtube' &&
+          it.gcs_path?.startsWith('youtube:')
+        ) {
+          const videoId = it.gcs_path.split(':')[1];
+          return {
+            ...it,
+            signed_url: `https://www.youtube.com/watch?v=${videoId}`,
+            video_id: videoId,
+          };
+        }
+
         if (it.gcs_path) {
           const url = await this.gcs
             .getFileSignedUrl(it.gcs_path)
@@ -333,11 +394,27 @@ export class AiRoutinesService {
     if (!routine) return res;
     const items = await Promise.all(
       routine.items.map(async (it: any) => {
+        // Handle YouTube items
+        if (
+          it.content_type === 'video/youtube' &&
+          it.gcs_path?.startsWith('youtube:')
+        ) {
+          const videoId = it.gcs_path.split(':')[1];
+          return {
+            ...it,
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+            signed_url: `https://www.youtube.com/watch?v=${videoId}`,
+            video_id: videoId,
+          };
+        }
+
         if (it.gcs_path) {
-          const url = await this.gcs.getFileSignedUrl(it.gcs_path).catch((e) => {
-            // keep diagnostics in storage service; return null on error
-            return null;
-          });
+          const url = await this.gcs
+            .getFileSignedUrl(it.gcs_path)
+            .catch((e) => {
+              // keep diagnostics in storage service; return null on error
+              return null;
+            });
           return {
             ...it,
             url: url?.url || null,
