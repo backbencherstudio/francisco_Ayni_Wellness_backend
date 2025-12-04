@@ -87,16 +87,62 @@ export class S3Adapter implements IStorage {
     value: Buffer | Uint8Array | string,
   ): Promise<AWS.S3.ManagedUpload.SendData> {
     try {
-      const params = {
+      // Detect ContentType based on file extension
+      const contentType = this.getContentType(key);
+      
+      const params: AWS.S3.PutObjectRequest = {
         Bucket: this._config.connection.awsBucket,
         Key: key,
         Body: value,
       };
+
+      // Set ContentType if detected
+      if (contentType) {
+        params.ContentType = contentType;
+      }
+
       const upload = await this.s3.upload(params).promise();
       return upload;
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Get ContentType based on file extension
+   * @param key
+   * @returns
+   */
+  private getContentType(key: string): string | undefined {
+    const ext = key.toLowerCase().split('.').pop();
+    const contentTypes: { [key: string]: string } = {
+      // Images
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      svg: 'image/svg+xml',
+      ico: 'image/x-icon',
+      bmp: 'image/bmp',
+      // Videos
+      mp4: 'video/mp4',
+      webm: 'video/webm',
+      ogv: 'video/ogg',
+      // Documents
+      pdf: 'application/pdf',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xls: 'application/vnd.ms-excel',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      // Text
+      txt: 'text/plain',
+      html: 'text/html',
+      css: 'text/css',
+      js: 'application/javascript',
+      json: 'application/json',
+    };
+    return contentTypes[ext || ''] || undefined;
   }
 
   /**

@@ -46,7 +46,7 @@ export class AuthService {
           billing_id: true,
           IsSubscriptionActive: true,
           role_users: true,
-          subscriptions: { select: { id: true, status: true, end_date: true } },
+          // subscriptions: { select: { id: true, status: true, end_date: true } },
         },
       });
 
@@ -55,12 +55,6 @@ export class AuthService {
           success: false,
           message: 'User not found',
         };
-      }
-
-      if (user.avatar) {
-        user['avatar_url'] = SazedStorage.url(
-          appConfig().storageUrl.avatar + user.avatar,
-        );
       }
 
       if (user) {
@@ -85,62 +79,88 @@ export class AuthService {
   async updateUser(
     userId: string,
     updateUserDto: UpdateUserDto,
-    image?: Express.Multer.File,
+    avatar?: Express.Multer.File,
   ) {
     try {
       const data: any = {};
-
-      console.log('hit in the update user service');
-
-      // Update user data fields if provided
       if (updateUserDto.name) {
         data.name = updateUserDto.name;
       }
+      if (updateUserDto.phone_number) {
+        data.phone_number = updateUserDto.phone_number;
+      }
+      if (updateUserDto.country) {
+        data.country = updateUserDto.country;
+      }
+      if (updateUserDto.state) {
+        data.state = updateUserDto.state;
+      }
+      if (updateUserDto.local_government) {
+        data.local_government = updateUserDto.local_government;
+      }
+      if (updateUserDto.city) {
+        data.city = updateUserDto.city;
+      }
+      if (updateUserDto.zip_code) {
+        data.zip_code = updateUserDto.zip_code;
+      }
+      if (updateUserDto.address) {
+        data.address = updateUserDto.address;
+      }
+      if (updateUserDto.gender) {
+        data.gender = updateUserDto.gender;
+      }
 
-      if (image) {
-        const fileName = `${StringHelper.randomString()}${image.originalname}`;
+      let mediaUrl: string | undefined;
+
+      if (avatar?.buffer) {
         try {
-          // Attempt upload first to avoid deleting old before success
-          await SazedStorage.put(
-            appConfig().storageUrl.avatar + fileName,
-            image.buffer,
-          );
+          // 1. Upload new avatar
+          // const fileName = `${StringHelper.randomString()}-${avatar.originalname}`;
+          const fileName = avatar.originalname.replace(/\s+/g, '-');
+          const key = `${appConfig().storageUrl.avatar}/${fileName}`;
 
-          const mediaUrl =
-            process.env.AWS_S3_ENDPOINT +
-            '/' +
-            process.env.AWS_S3_BUCKET +
-            appConfig().storageUrl.avatar +
-            `/${fileName}`;
+          await SazedStorage.put(key, avatar.buffer);
+          mediaUrl = SazedStorage.url(key);
 
-          console.log('mediaUrl', mediaUrl);
-
-          // delete old image from storage only after successful upload
-          const oldImage = await this.prisma.user.findFirst({
+          // 2. Get old avatar (if any)
+          const user = await this.prisma.user.findUnique({
             where: { id: userId },
             select: { avatar: true },
           });
 
-          if (oldImage?.avatar) {
+          // 3. Delete old avatar if exists and is not empty
+          if (user?.avatar) {
             try {
-              await SazedStorage.delete(
-                appConfig().storageUrl.avatar + oldImage.avatar,
-              );
-            } catch (e) {
-              console.warn('Failed to delete old avatar:', e?.message || e);
+              // If avatar stored is a full URL -> extract its path
+              const url = new URL(user.avatar);
+              const oldKey = url.pathname.replace(/^\/+/, ''); // remove leading slash
+
+              await SazedStorage.delete(oldKey);
+            } catch {
+              // If it wasn't a URL, assume it is the actual storage key
+              await SazedStorage.delete(user.avatar);
             }
           }
 
+          // 4. Update user's avatar
           data.avatar = mediaUrl;
-          console.log('Avatar uploaded to:', mediaUrl);
-        } catch (e) {
-          console.warn('Avatar upload failed:', e?.message || e);
+        } catch (err: any) {
+          console.warn('Avatar upload failed:', err.message || err);
         }
       }
 
-      console.log('avatar url:', data.avatar);
+      console.log('media url', mediaUrl);
 
       const user = await UserRepository.getUserDetails(userId);
+
+      if (!user) {
+        return {
+          success: false,
+          message: 'User not found',
+        };
+      }
+
       if (user) {
         await this.prisma.user.update({
           where: { id: userId },
@@ -238,39 +258,39 @@ export class AuthService {
         60 * 60 * 24 * 7, // 7 days in seconds
       );
 
-      // Check active subscription
-      const [activeSubscription, activeTrial, anyTrial] = await Promise.all([
-        this.prisma.subscription.findFirst({
-          where: {
-            user_id: user.id,
-            status: 'active',
-            OR: [{ end_date: null }, { end_date: { gt: new Date() } }],
-            NOT: { plan_name: 'trial' },
-          },
-        }),
-        this.prisma.subscription.findFirst({
-          where: {
-            user_id: user.id,
-            status: 'active',
-            plan_name: 'trial',
-            end_date: { gt: new Date() },
-          },
-        }),
-        this.prisma.subscription.findFirst({
-          where: { user_id: user.id, plan_name: 'trial' },
-          select: { id: true },
-        }),
-      ]);
+      // // Check active subscription
+      // const [activeSubscription, activeTrial, anyTrial] = await Promise.all([
+      //   this.prisma.subscription.findFirst({
+      //     where: {
+      //       user_id: user.id,
+      //       status: 'active',
+      //       OR: [{ end_date: null }, { end_date: { gt: new Date() } }],
+      //       NOT: { plan_name: 'trial' },
+      //     },
+      //   }),
+      //   this.prisma.subscription.findFirst({
+      //     where: {
+      //       user_id: user.id,
+      //       status: 'active',
+      //       plan_name: 'trial',
+      //       end_date: { gt: new Date() },
+      //     },
+      //   }),
+      //   this.prisma.subscription.findFirst({
+      //     where: { user_id: user.id, plan_name: 'trial' },
+      //     select: { id: true },
+      //   }),
+      // ]);
 
-      const trial_active = !!activeTrial;
-      const trial_ends_at = activeTrial?.end_date?.toISOString();
-      const trial_days_remaining = trial_active
-        ? Math.ceil(
-            (activeTrial!.end_date!.getTime() - Date.now()) /
-              (1000 * 60 * 60 * 24),
-          )
-        : 0;
-      const trial_available = !trial_active && !activeSubscription && !anyTrial;
+      // const trial_active = !!activeTrial;
+      // const trial_ends_at = activeTrial?.end_date?.toISOString();
+      // const trial_days_remaining = trial_active
+      //   ? Math.ceil(
+      //       (activeTrial!.end_date!.getTime() - Date.now()) /
+      //         (1000 * 60 * 60 * 24),
+      //     )
+      //   : 0;
+      // const trial_available = !trial_active && !activeSubscription && !anyTrial;
 
       return {
         success: true,
@@ -281,14 +301,14 @@ export class AuthService {
           refresh_token: refreshToken,
         },
         type: user.type,
-        subscription_active: !!activeSubscription,
-        subscription_required: !activeSubscription && !trial_active,
-        redirect:
-          !activeSubscription && !trial_active ? '/subscription' : undefined,
-        trial_active,
-        trial_days_remaining,
-        trial_ends_at,
-        trial_available,
+        // subscription_active: !!activeSubscription,
+        // subscription_required: !activeSubscription && !trial_active,
+        // redirect:
+        //   !activeSubscription && !trial_active ? '/subscription' : undefined,
+        // trial_active,
+        // trial_days_remaining,
+        // trial_ends_at,
+        // trial_available,
       };
     } catch (error) {
       return {

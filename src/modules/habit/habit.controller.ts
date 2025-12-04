@@ -16,11 +16,11 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { CompleteHabitDto } from './dto/complete-habit.dto';
-import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
+// import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
 
 @ApiTags('Habit')
 @Controller('habit')
-@UseGuards(JwtAuthGuard, SubscriptionGuard)
+@UseGuards(JwtAuthGuard)
 export class HabitController {
   constructor(private readonly habitService: HabitService) {}
 

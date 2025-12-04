@@ -26,6 +26,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import appConfig from '../../config/app.config';
 import { AuthGuard } from '@nestjs/passport';
 import { AppleAuthGuard } from './guards/apple-auth.guard';
+import { GetUser } from './decorators/get-user.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -222,19 +223,21 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Patch('update')
   @UseInterceptors(
-    FileInterceptor('image', {
+    FileInterceptor('avatar', {
       storage: memoryStorage(),
     }),
   )
   async updateUser(
-    @Req() req: Request,
+    @GetUser('userId') userId: any,
     @Body() data: UpdateUserDto,
-    @UploadedFile() image: Express.Multer.File,
+    @UploadedFile() avatar: Express.Multer.File,
   ) {
     try {
-      const user_id = req.user.userId;
-      const response = await this.authService.updateUser(user_id, data, image);
-      console.log('image from CTrl', image);
+      const response = await this.authService.updateUser(userId, data, avatar);
+      console.log('userId', userId);
+      console.log('data', data);
+      console.log('avatar', avatar);
+      console.log('response', response);
       return response;
     } catch (error) {
       return {
@@ -243,6 +246,7 @@ export class AuthController {
       };
     }
   }
+
 
   // --------------change password---------
 

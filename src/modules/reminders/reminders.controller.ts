@@ -14,11 +14,11 @@ import { UpdateReminderDto } from './dto/update-reminder.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
-import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
+// import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
 
 @ApiBearerAuth()
 @ApiTags('Reminders')
-@UseGuards(JwtAuthGuard, SubscriptionGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('reminders')
 export class RemindersController {
   constructor(private readonly remindersService: RemindersService) {}
