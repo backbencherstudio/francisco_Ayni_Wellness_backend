@@ -81,9 +81,10 @@ export class SubscriptionService {
       });
 
       if (existingSubscription && existingSubscription.isActive) {
-        throw new BadRequestException(
-          'User already has an active subscription',
-        );
+        return {
+          success: false,
+          message: 'User already has an active subscription',
+        };
       }
 
       let customerId = dbUser.billing_id;
@@ -185,8 +186,7 @@ export class SubscriptionService {
     };
   }
 
-
-   async cancelSubscription(userId: string) {
+  async cancelSubscription(userId: string) {
     const subscription = await this.prisma.subscription.findFirst({
       where: {
         userId: userId,
@@ -223,5 +223,4 @@ export class SubscriptionService {
       );
     }
   }
-
 }
