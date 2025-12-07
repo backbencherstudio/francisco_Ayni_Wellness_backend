@@ -98,7 +98,6 @@ export class SazedStorage {
    * @returns
    */
   private static storageDisk() {
-    // defensive guard: if config missing, fallback to local storage
     if (!this._config) {
       const path = require('path');
       this._config = ({
@@ -111,7 +110,6 @@ export class SazedStorage {
     const driver: string = this._config.driver;
     const config: DiskOption = this._config;
 
-    // helpful debug logging to show which driver/endpoint will be used
     try {
       const cfgLog: any = {
         driver: driver,
@@ -124,10 +122,8 @@ export class SazedStorage {
         cfgLog.rootUrl = config.connection.rootUrl;
         cfgLog.publicUrl = config.connection.publicUrl;
       }
-      // do not spam logs in production; this is a short informative log at startup
       console.log('SazedStorage config:', cfgLog);
     } catch (err) {
-      // ignore logging errors
     }
 
     let driverAdapter: IStorage;

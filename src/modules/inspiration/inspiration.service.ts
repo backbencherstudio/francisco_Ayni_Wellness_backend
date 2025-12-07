@@ -21,17 +21,12 @@ export class InspirationService {
         normalizedKeyword as InspirationKeyword,
       );
 
-      // Choose endpoint: if provided keyword is a valid enum, use it; otherwise fallback to random
       const endpoint = isValid ? normalizedKeyword : 'random';
       const response = await fetch(`https://zenquotes.io/api/${endpoint}`);
 
       const data = await response.json();
       const quote = data[0]?.q;
       const author = data[0]?.a;
-
-      // console.log('data is:', data);
-      // console.log('quote is:', quote);
-      // console.log('author is:', author);
 
       if (!quote) {
         return { message: 'Inspiration not found', status: false };
@@ -77,7 +72,6 @@ export class InspirationService {
     return { success: true, count: list.length, inspirations: list };
   }
 
-  // Browse count by keyword category across ALL (or user-specific when mine=true)
   async browseByCategory(userId: string, mine = false) {
     if (!userId) throw new BadRequestException('User required');
     const where: any = mine ? { user_id: userId } : {};
@@ -93,12 +87,10 @@ export class InspirationService {
     return { success: true, mine, categories };
   }
 
-  // Force fetch a fresh quote ignoring any previously stored logic
   async newQuote(userId: string, keyword?: string) {
     return this.getDailyInspiration(userId, keyword || '');
   }
 
-  // Personalized suggestion: map recent mood (avg last 3 entries) to a keyword
   async personalized(userId: string) {
     if (!userId) throw new BadRequestException('User required');
     const prismaAny: any = this.prisma as any;

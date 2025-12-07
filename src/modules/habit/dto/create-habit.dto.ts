@@ -21,9 +21,6 @@ export class CreateHabitDto {
   })
   frequency: FrequencyType;
 
-  // Reminder is set on the dedicated Reminders page after creation
-
-
   @IsOptional()
   @IsEnum(HabitCategory)
   @ApiProperty({
