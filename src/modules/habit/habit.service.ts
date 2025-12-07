@@ -7,7 +7,6 @@ import { CreateHabitDto } from './dto/create-habit.dto';
 import { UpdateHabitDto } from './dto/update-habit.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { HabitCategory, $Enums } from '@prisma/client';
-// Reminder windows and slots are handled in the Reminders module now
 import { CompleteHabitDto } from './dto/complete-habit.dto';
 import { startOfDay, subDays, getDay } from 'date-fns';
 
@@ -33,7 +32,6 @@ export class HabitService {
         return { message: 'User not found', status: false };
       }
 
-      // Ensure the user actually exists in the current database (avoids Prisma P2025 connect error)
       const userExists = await this.prisma.user.findUnique({
         where: { id: userId },
       });
@@ -45,7 +43,6 @@ export class HabitService {
         };
       }
 
-      // Prevent duplicate habit names for this user (simple UX guard)
       const existingHabit = await this.prisma.habit.findFirst({
         where: {
           user_id: userId,
@@ -171,7 +168,6 @@ export class HabitService {
   async habitHistory(userId: string, habitId: string, days = 30) {
     const prismaAny: any = this.prisma as any;
 
-    // If days <= 0, treat as "all-time" (no date filter)
     if (typeof days === 'number' && days <= 0) {
       const logs = await prismaAny.habitLog.findMany({
         where: { user_id: userId, habit_id: habitId },
@@ -180,7 +176,7 @@ export class HabitService {
       return { success: true, habit_id: habitId, days: 0, logs };
     }
 
-    const from = subDays(new Date(), (days as number) - 1); // inclusive
+    const from = subDays(new Date(), (days as number) - 1); 
 
     const logs = await prismaAny.habitLog.findMany({
       where: {
@@ -204,7 +200,6 @@ export class HabitService {
 
     if (!existing) return { success: false, message: 'Habit not found' };
 
-    // Habit updates are limited to habit fields; reminders are edited via Reminders module
     if (dto.habit_name && dto.habit_name !== existing.habit_name) {
       const duplicate = await this.prisma.habit.findFirst({
         where: {
@@ -246,7 +241,6 @@ export class HabitService {
     if (!existing) return { success: false, message: 'Habit not found' };
 
     if (hard) {
-      // Remove any centralized reminders tied to this habit to avoid FK issues and stray schedules
       await (this.prisma as any).reminders.deleteMany({
         where: { habit_id: habitId },
       });
@@ -262,7 +256,6 @@ export class HabitService {
       };
     }
 
-    // On soft delete, also remove reminders so the scheduler stops triggering
     await (this.prisma as any).reminders.deleteMany({
       where: { habit_id: habitId },
     });
@@ -283,7 +276,7 @@ export class HabitService {
     today: Date = new Date(),
   ) {
     if (!frequency) return true;
-    const dow = getDay(today); // 0=Sun..6=Sat
+    const dow = getDay(today); 
     switch (frequency) {
       case 'Daily':
         return true;
@@ -292,7 +285,7 @@ export class HabitService {
       case 'Weekends':
         return dow === 0 || dow === 6;
       case 'Weekly':
-        return true; // Without a specific day config, include it by default
+        return true; 
       default:
         return true;
     }
@@ -317,7 +310,6 @@ export class HabitService {
     const byHabit = new Map<string, any>();
     logs.forEach((l: any) => byHabit.set(l.habit_id, l));
 
-    // Pull active reminders from centralized Reminders table as a fallback for reminder_time
     const reminders = await (this.prisma as any).reminders.findMany({
       where: { habit_id: { in: ids.length ? ids : ['_none_'] }, active: true },
       orderBy: { created_at: 'asc' },

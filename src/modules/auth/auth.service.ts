@@ -804,9 +804,6 @@ export class AuthService {
     try {
       const user = await UserRepository.getUserDetails(user_id);
 
-      // console.log("param", user_id, oldPassword, newPassword)
-      // console.log("user", user)
-
       if (user) {
         const _isValidPassword = await UserRepository.validatePassword({
           email: user.email,
@@ -898,7 +895,6 @@ export class AuthService {
           token: token,
           forEmailChange: true,
         });
-        // console.log("existToken", existToken);
 
         if (existToken) {
           await UserRepository.changeEmail({

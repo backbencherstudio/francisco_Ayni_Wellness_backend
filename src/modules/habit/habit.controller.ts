@@ -28,7 +28,6 @@ export class HabitController {
   @Post('create')
   async createHabit(@GetUser() user, @Body() createHabitDto: CreateHabitDto) {
     try {
-      // console.log('hitted and user is:', user);
       return await this.habitService.createHabit(user.userId, createHabitDto);
     } catch (error) {
       console.error('Error creating habit:', error);

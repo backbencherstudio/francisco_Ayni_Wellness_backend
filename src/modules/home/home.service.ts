@@ -4,7 +4,7 @@ import { startOfDay, getDay } from 'date-fns';
 
 interface HomeDashboardResponse {
   success: boolean;
-  date: string; // ISO day start
+  date: string; 
   greeting: { partOfDay: string; message: string };
   user: {
     id: string;
@@ -17,11 +17,11 @@ interface HomeDashboardResponse {
     total: number;
     completed: number;
     remaining: number;
-    percent: number; // 0-100 rounded
+    percent: number; 
   };
   meditation_minutes: number;
   mood: {
-    score: number | null; // 1-10 or null
+    score: number | null; 
     entry_id: string | null;
   };
   meta: {
@@ -39,7 +39,6 @@ export class HomeService {
     const dayStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
     const nextDay = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1));
 
-    // Fetch core data in parallel (habits + routine for today)
     const [user, habits, logs, routine, todayMood] = await Promise.all([
       prismaAny.user.findFirst({ where: { id: userId } }),
 
@@ -66,10 +65,9 @@ export class HomeService {
       }),
     ]);
 
-    // Determine which habits are due today (respect frequency)
     const isDueToday = (frequency?: string | null, today: Date = new Date()) => {
       if (!frequency) return true;
-      const dow = getDay(today); // 0=Sun..6=Sat
+      const dow = getDay(today); 
       switch (frequency) {
         case 'Daily':
           return true;
@@ -86,7 +84,6 @@ export class HomeService {
 
     const dueHabits = habits.filter((h: any) => isDueToday(h.frequency));
     const totalHabits = dueHabits.length;
-    // Only consider logs that correspond to due habits
     const dueIds = dueHabits.map((h: any) => h.id);
     const habitCompleted = logs.filter((l: any) => dueIds.includes(l.habit_id)).length;
     console.log('total habit', totalHabits);
@@ -116,7 +113,6 @@ export class HomeService {
         meditationMinutes += l.duration_minutes || 0;
       }
     }
-    // Add routine items meditation/sound healing minutes (completed items)
     for (const it of routineItems) {
       if (
         it.status === 'completed' &&
@@ -125,7 +121,6 @@ export class HomeService {
         meditationMinutes += it.duration_min || 0;
       }
     }
-    // Mood rating: prefer routine mood check rating for today, fallback to MoodEntry
     const moodScore =
       routine?.mood_check?.rating != null
         ? routine.mood_check.rating
@@ -146,7 +141,6 @@ export class HomeService {
         last_name: user.last_name,
         avatar: user.avatar,
       },
-      // UI label says Daily Routines; value is combined (habits + routine items) per requirement
       routines: { total, completed, remaining, percent },
       meditation_minutes: meditationMinutes,
       mood: { score: moodScore, entry_id: todayMood ? todayMood.id : null },

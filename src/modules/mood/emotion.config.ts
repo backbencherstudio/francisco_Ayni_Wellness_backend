@@ -1,12 +1,12 @@
 
 export interface EmotionDefinition {
-  key: string;          // canonical key used in storage & APIs
-  label: string;        // human readable label for UI
+  key: string;          
+  label: string;        
   valence: 'positive' | 'negative' | 'neutral';
-  intensity: 1 | 2 | 3; // coarse perceived intensity for heuristics
+  intensity: 1 | 2 | 3; 
 }
 
-export const EMOTION_CONFIG_VERSION = 1; // bump if ordering/semantics change
+export const EMOTION_CONFIG_VERSION = 1; 
 
 export const EMOTIONS: EmotionDefinition[] = [
   { key: 'peaceful',     label: 'Peaceful',     valence: 'positive', intensity: 1 },

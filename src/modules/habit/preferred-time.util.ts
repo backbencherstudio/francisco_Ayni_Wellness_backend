@@ -1,20 +1,18 @@
 import { $Enums } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 
-// Preferred time windows (end hour is exclusive for slot generation)
-// Each window uses [start,end) hours (end exclusive). We generate 30-min slots
-// but business/UI wants the first visible slot at :30 (e.g., 6:30 not 6:00).
+
 export const PREF_WINDOWS: Record<string,{ start:number; end:number; firstHalf?: boolean; }> = {
-  Morning: { start: 6, end: 10, firstHalf: false },      // display from 06:30 to 09:30
-  Afternoon: { start: 12, end: 16, firstHalf: false },   // 12:30 - 15:30
-  Evening: { start: 18, end: 21, firstHalf: false },     // 18:30 - 20:30
-  Night: { start: 21, end: 23, firstHalf: false },       // 21:30 - 22:30 (window labeled 9-11 PM)
+  Morning: { start: 6, end: 10, firstHalf: false },     
+  Afternoon: { start: 12, end: 16, firstHalf: false },   
+  Evening: { start: 18, end: 21, firstHalf: false },     
+  Night: { start: 21, end: 23, firstHalf: false },       
 };
 
 export interface ReminderSlot {
-  value: string;      // HH:MM legacy
-  value_iso: string;  // HH:MM:00 ISO-like
-  label: string;      // 6:30 AM
+  value: string;      
+  value_iso: string;  
+  label: string;     
 }
 
 // Normalize various UI labels to enum keys
@@ -47,13 +45,12 @@ export function generatePreferredSlots(pref: $Enums.PreferredTime): ReminderSlot
   const slots: ReminderSlot[] = [];
   for (let h = win.start; h < win.end; h++) {
     for (let m of [0,30]) {
-      if (h === win.end && m>0) continue; // guard end boundary
-      // Skip the first :00 in each window to start at :30 visual requirement
+      if (h === win.end && m>0) continue; 
       if (h === win.start && m === 0) continue;
       const hour = h.toString().padStart(2,'0');
       const mm = m.toString().padStart(2,'0');
-      const base = `${hour}:${mm}`;       // for UI selection
-      const iso = `${hour}:${mm}:00`;     // stored value
+      const base = `${hour}:${mm}`;       
+      const iso = `${hour}:${mm}:00`;     
       slots.push({ value: base, value_iso: iso, label: formatAmPm(h,m) });
     }
   }
@@ -62,7 +59,7 @@ export function generatePreferredSlots(pref: $Enums.PreferredTime): ReminderSlot
 }
 
 export function validateReminderAgainstPreferred(reminder: string, pref?: $Enums.PreferredTime) {
-  if (!pref) return; // nothing to validate
+  if (!pref) return; 
   const win = PREF_WINDOWS[pref]; if (!win) return;
   let timePart = reminder.trim();
   const isoDateTimeMatch = timePart.match(/T(\d{2}:\d{2}:\d{2})/);
@@ -80,7 +77,6 @@ export function getReminderSlots(preferredRaw: string) {
   const pref = normalizePreferred(preferredRaw);
   if (!pref) throw new BadRequestException('Invalid preferred time');
   const slots = generatePreferredSlots(pref);
-  // Provide a UI label echo (maintain design string)
   const uiLabelMap: Record<$Enums.PreferredTime,string> = {
     Morning: 'Morning (6-10 AM)',
     Afternoon: 'Afternoon (12-4 PM)',

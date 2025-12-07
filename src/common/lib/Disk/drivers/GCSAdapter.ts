@@ -11,8 +11,8 @@ export class GCSAdapter implements IStorage {
     this._config = config;
     this.storage = new Storage({
       projectId: this._config.connection.gcpProjectId,
-      keyFilename: this._config.connection.gcpKeyFile, // path to your service account json key file
-      apiEndpoint: this._config.connection.gcpApiEndpoint, // optional, for custom endpoints
+      keyFilename: this._config.connection.gcpKeyFile, 
+      apiEndpoint: this._config.connection.gcpApiEndpoint, 
     });
 
     this.bucket = this.storage.bucket(this._config.connection.gcpBucket);
@@ -24,7 +24,6 @@ export class GCSAdapter implements IStorage {
    */
   url(key: string): string {
     if (this._config.connection.gcpApiEndpoint) {
-      // If using custom endpoint or emulator
       return `${this._config.connection.gcpApiEndpoint}/${this._config.connection.gcpBucket}/${key}`;
     }
     return `https://storage.googleapis.com/${this._config.connection.gcpBucket}/${key}`;

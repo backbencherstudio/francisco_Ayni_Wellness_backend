@@ -4,13 +4,6 @@
  * @author Sazedul Islam <sazedulislam9126@gmail.com>
  */
 export class StringHelper {
-  // public static randomString(length: number = 32): string {
-  //   const randomName = Array(length)
-  //     .fill(null)
-  //     .map(() => Math.round(Math.random() * 16).toString(16))
-  //     .join('');
-  //   return randomName;
-  // }
 
   public static randomString(length: number = 8): string {
     const now = Date.now().toString(36);

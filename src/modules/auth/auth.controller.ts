@@ -110,11 +110,10 @@ export class AuthController {
         email: user_email,
       });
 
-      // store to secure cookies
       res.cookie('refresh_token', response.authorization.refresh_token, {
         httpOnly: true,
         secure: true,
-        maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+        maxAge: 1000 * 60 * 60 * 24 * 7, 
       });
 
       res.json(response);

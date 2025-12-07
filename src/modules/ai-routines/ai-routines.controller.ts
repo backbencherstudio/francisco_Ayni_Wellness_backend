@@ -41,7 +41,6 @@ export class AiRoutinesController {
     return this.svc.listHistory(user.userId);
   }
 
-  // Single routine details (optionally include signed asset URLs via ?assets=1)
   @Get(':routineId')
   async routineDetails(
     @GetUser() user,
@@ -52,7 +51,6 @@ export class AiRoutinesController {
     return this.svc.getRoutineDetails(user.userId, routineId, withAssets);
   }
 
-  // Redo a routine: clone its items into a new routine (today by default, or next day)
   @Post(':routineId/redo')
   async redoRoutine(
     @GetUser() user,
@@ -72,7 +70,6 @@ export class AiRoutinesController {
     return this.svc.completeItem(user.userId, itemId);
   }
 
-  // Step 1: Mood check specific to AI routine (description + emotion + prompts)
   @Post('mood-check')
   async moodCheck(
     @GetUser() user,
@@ -82,13 +79,11 @@ export class AiRoutinesController {
     return this.svc.recordMoodAndGenerate(user.userId, body);
   }
 
-  // Signed URLs enrichment for routine assets
   @Get('today/assets')
   async todayWithAssets(@GetUser() user) {
     return this.svc.listTodayWithSignedAssets(user.userId);
   }
 
-  // Journaling answer submission for a Journaling item
   @Post('item/:itemId/journal')
   async submitJournal(
     @GetUser() user,
