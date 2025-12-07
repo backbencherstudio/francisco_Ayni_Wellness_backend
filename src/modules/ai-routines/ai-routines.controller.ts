@@ -11,12 +11,11 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { AiRoutinesService } from './ai-routines.service';
-import { SubscriptionOnly } from 'src/common/decorator/subscription-only.decorator';
-// import { SubscriptionGuard } from 'src/common/guard/subscription/subscription.guard';
+import { SubscriptionGuard } from '../../common/guard/subscription/subscription.guard';
 
 @ApiBearerAuth()
 @ApiTags('AI Routines')
-@UseGuards(JwtAuthGuard, )
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('ai/routines')
 export class AiRoutinesController {
   constructor(private svc: AiRoutinesService) {}
