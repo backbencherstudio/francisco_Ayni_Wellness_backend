@@ -337,6 +337,11 @@ model Subscription {
   planId String
   plan   SubsPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
+  // trial tracking
+  is_trial_used Boolean @default(false)
+  is_on_trial  Boolean @default(false)
+  trialStartsAt DateTime?
+
   // Required for tracking
   startDate   DateTime  @default(now())
   endDate     DateTime?
