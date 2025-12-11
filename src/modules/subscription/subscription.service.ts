@@ -35,6 +35,7 @@ export class SubscriptionService {
     };
   }
 
+
   async createProductAndPrice(dto: CreateProductAndPriceDto) {
     const { product, price } = await StripePayment.createProductAndPrice({
       name: dto.name,
@@ -43,6 +44,8 @@ export class SubscriptionService {
       interval: dto.interval,
       interval_count: dto.interval_count,
     });
+
+    console.log('Created dto price:', dto.price);
 
     const productRecord = await this.prisma.subsPlan.create({
       data: {
@@ -59,6 +62,8 @@ export class SubscriptionService {
         trialDays: 30,
       },
     });
+
+    console.log('Created Subscription Plan in DB:', productRecord);
 
     return productRecord;
   }
