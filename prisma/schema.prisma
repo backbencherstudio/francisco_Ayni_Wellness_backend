@@ -289,7 +289,7 @@ model SubsPlan {
 
   // Billing details
   isFree        Boolean   @default(false)
-  price         Int?
+  price         Decimal
   currency      String?
   interval      Interval?
   intervalCount Int?
