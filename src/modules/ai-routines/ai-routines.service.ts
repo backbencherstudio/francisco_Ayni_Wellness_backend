@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { FirebaseStorageService } from '../firebase-storage/firebase-storage.service';
 import { startOfDay } from 'date-fns';
 import { NotificationService as AppNotificationService } from '../application/notification/notification.service';
-
+import { stat } from 'fs';
 
 @Injectable()
 export class AiRoutinesService {
@@ -93,9 +93,9 @@ export class AiRoutinesService {
       items.push({
         type: 'Podcast',
         title: youtubeVideo.title,
-        gcs_path: `youtube:${youtubeVideo.videoId}`, 
+        gcs_path: `youtube:${youtubeVideo.videoId}`,
         content_type: 'video/youtube',
-        duration_min: 15, 
+        duration_min: 15,
         description: youtubeVideo.description,
       });
     } else {
@@ -363,7 +363,7 @@ export class AiRoutinesService {
     const check = await this.prisma.routineMoodCheck.create({
       data: {
         user_id: userId,
-        rating: body.rating ?? body.score, 
+        rating: body.rating ?? body.score,
         emotions: primaryEmotion ? [primaryEmotion] : (body.emotions ?? []),
         statements: selectedStatements,
         note: description,
@@ -423,6 +423,20 @@ export class AiRoutinesService {
       data: { journal_text: text },
     });
     return this.completeItem(userId, itemId);
+  }
+
+  async getJournalHistory(userId: string, limit = 20) {
+    const items = await this.prisma.routineItem.findMany({
+      where: {
+        routine: { user_id: userId },
+        type: 'Journaling',
+        status: 'completed',
+        journal_text: { not: null },
+      },
+      orderBy: { completed_at: 'desc' },
+      take: limit,
+    });
+    return { success: true, data: items };
   }
 
   async redoRoutine(
