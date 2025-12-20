@@ -39,7 +39,7 @@ export class SubscriptionService {
   async createProductAndPrice(dto: CreateProductAndPriceDto) {
     const { product, price } = await StripePayment.createProductAndPrice({
       name: dto.name,
-      unit_amount: dto.price * 100, // Stripe requires cents
+      unit_amount: Math.round(dto.price * 100), // Stripe requires cents
       currency: dto.currency,
       interval: dto.interval,
       interval_count: dto.interval_count,

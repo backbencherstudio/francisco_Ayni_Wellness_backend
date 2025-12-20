@@ -91,4 +91,9 @@ export class AiRoutinesController {
   ) {
     return this.svc.submitJournal(user.userId, itemId, body.text);
   }
+
+  @Get('journal/history')
+  async getJournalHistory(@GetUser() user) {
+    return this.svc.getJournalHistory(user.userId);
+  }
 }
