@@ -14,6 +14,24 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
 export class SubscriptionController {
   constructor(private readonly subscriptionService: SubscriptionService) {}
 
+  // @ApiOperation({ summary: 'Create Stripe Checkout Session for Subscription' })
+  // @Post('checkout')
+  // createCheckoutSession(
+  //   @Req() req,
+  //   @Body() createSubscriptionDto: CreateSubscriptionDto,
+  // ) {
+  //   return this.subscriptionService.createCheckoutSession(
+  //     req.user,
+  //     createSubscriptionDto,
+  //   );
+  // }
+
+  @ApiOperation({ summary: 'Start Trial Subscription' })
+  @Post('start-trial')
+  startTrial(@GetUser() user, @Body('planId') planId: string) {
+    return this.subscriptionService.startTrial(user, planId);
+  }
+
   @ApiOperation({ summary: 'create product & price' })
   @Post('create-product-price')
   createProductAndPrice(@Body() dto: CreateProductAndPriceDto) {

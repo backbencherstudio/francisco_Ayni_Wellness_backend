@@ -1,4 +1,5 @@
 import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { SubscriptionPlan } from '@prisma/client';
 
 enum IntervalEnum {
   MONTH = 'month',
@@ -12,9 +13,11 @@ export class CreateProductAndPriceDto {
   @IsNumber()
   price: number;
 
+  @IsOptional()
   @IsString()
   currency: string;
 
+  @IsOptional()
   @IsString()
   interval: IntervalEnum;
 
@@ -29,4 +32,12 @@ export class CreateProductAndPriceDto {
   @IsOptional()
   @IsString()
   price_description: string;
+
+  @IsOptional()
+  @IsNumber()
+  trialDays: number;
+
+  @IsOptional()
+  @IsEnum(SubscriptionPlan)
+  type: SubscriptionPlan;
 }

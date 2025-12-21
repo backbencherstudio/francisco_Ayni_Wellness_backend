@@ -82,13 +82,12 @@ model User {
   receiver_notifications    Notification[] @relation("receiver")
   sender_notifications      Notification[] @relation("sender")
 
-  user_payment_methods  UserPaymentMethod[]
-  user_settings         UserSetting[]
-  ucodes                Ucode[]
-  roles                 Role[]
-  role_users            RoleUser[]
-  payment_transactions  PaymentTransaction[]
-  subscriptions         Subscription[]
+  user_payment_methods UserPaymentMethod[]
+  user_settings        UserSetting[]
+  ucodes               Ucode[]
+  roles                Role[]
+  role_users           RoleUser[]
+
   Habit                 Habit[]
   Mood                  Mood[]
   statistics            Statistics[]
@@ -102,7 +101,12 @@ model User {
   routine_profile       UserRoutineProfile?
   routines              Routine[]
   routine_mood_checks   RoutineMoodCheck[]
-  paymentMethods        PaymentMethod[]
+
+  payment_transactions PaymentTransaction[]
+  paymentMethods       PaymentMethod[]
+
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  subscriptionId String?
 
   @@map("users")
 }
@@ -289,7 +293,7 @@ model SubsPlan {
 
   // Billing details
   isFree        Boolean   @default(false)
-  price         Decimal
+  price         Decimal?
   currency      String?
   interval      Interval?
   intervalCount Int?
@@ -300,6 +304,7 @@ model SubsPlan {
 
   // Trial (for free plan)
   trialDays Int?
+  type      SubscriptionPlan @default(FREE)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -337,16 +342,15 @@ model Subscription {
   planId String
   plan   SubsPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
-  // trial tracking
-  is_trial_used Boolean @default(false)
-  is_on_trial  Boolean @default(false)
-  trialStartsAt DateTime?
-
   // Required for tracking
-  startDate   DateTime  @default(now())
-  endDate     DateTime?
-  trialEndsAt DateTime?
-  status      String?
+  startDate     DateTime  @default(now())
+  endDate       DateTime?
+  trialEndsAt   DateTime?
+  status        String?
+  remainingDays Int?
+
+  // Plan type
+  type String
 
   // Stripe subscription
   stripeSubId String?
@@ -354,6 +358,7 @@ model Subscription {
   // Auto-renew
   isActive          Boolean @default(true)
   cancelAtPeriodEnd Boolean @default(false)
+  isTrial           Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -364,8 +369,9 @@ model Subscription {
 
 enum SubscriptionPlan {
   FREE
-  PREMIUM_MONTHLY
-  PREMIUM_YEARLY
+  TRIALING
+  BASIC
+  PREMIUM
 }
 
 // model UserPaymentMethod {

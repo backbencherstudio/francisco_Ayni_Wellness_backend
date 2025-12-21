@@ -434,30 +434,6 @@ export class StripePayment {
         },
       },
     });
-    // return await Stripe.checkout.sessions.create({
-    //   mode: 'payment',
-    //   customer: customerId,
-    //   payment_method_types: ['card', 'us_bank_account'],
-    //   payment_method_options: {
-    //     us_bank_account: {
-    //       verification_method: 'automatic',
-    //     },
-    //   },
-    //   line_items: [
-    //     {
-    //       price_data: {
-    //         currency: 'usd',
-    //         unit_amount: amount * 100,
-    //         product_data: {
-    //           name: 'T-shirt',
-    //         },
-    //       },
-    //       quantity: 1,
-    //     },
-    //   ],
-    //   success_url: 'https://example.com/success',
-    //   cancel_url: 'https://example.com/cancel',
-    // });
   }
   // end ACH
 
@@ -516,7 +492,7 @@ export class StripePayment {
     customer_id,
     price_id,
     payment_method_id,
-    trial_period_days,
+    // trial_period_days,
   }: {
     customer_id: string;
     price_id: string;
@@ -527,7 +503,7 @@ export class StripePayment {
       customer: customer_id,
       items: [{ price: price_id }],
       expand: ['latest_invoice.payment_intent'],
-      trial_period_days: trial_period_days,
+      // trial_period_days: trial_period_days,
     };
 
     if (payment_method_id) {
