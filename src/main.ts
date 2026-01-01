@@ -110,7 +110,7 @@ async function bootstrap() {
   });
 
   // Handle raw body for webhooks
-  app.use('/payment/stripe/webhook', express.raw({ type: 'application/json' }));
+  app.use(['/api/payment/stripe/webhook', '/payment/stripe/webhook'], express.raw({ type: 'application/json' }));
 
   app.setGlobalPrefix('api', {
     exclude: [
