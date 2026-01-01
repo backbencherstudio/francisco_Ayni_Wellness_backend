@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { StripePayment } from '../../../common/lib/Payment/stripe/StripePayment';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SubscriptionPlan } from '@prisma/client';
-import appConfig from '../../../config/app.config';
 
 @Injectable()
 export class StripeService {
@@ -17,7 +16,7 @@ export class StripeService {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
-        await this.handleSubscriptionUpdate(event.data.object as any);
+        await this.handleSubscriptionUpdate(event.data.object as any, event.type);
         break;
       default:
         this.logger.log(`Unhandled event type ${event.type}`);
@@ -26,14 +25,26 @@ export class StripeService {
     return { received: true };
   }
 
-  private async handleSubscriptionUpdate(subscription: any) {
+  private pickUnixSeconds(...values: Array<any>): number | null {
+    for (const v of values) {
+      const n = typeof v === 'string' ? Number(v) : v;
+      if (typeof n === 'number' && Number.isFinite(n) && n > 0) return n;
+    }
+    return null;
+  }
+
+  private async handleSubscriptionUpdate(
+    subscription: any,
+    eventType:
+      | 'customer.subscription.created'
+      | 'customer.subscription.updated'
+      | 'customer.subscription.deleted',
+  ) {
     const customerId = subscription.customer;
-    const status = subscription.status;
-    const planId = subscription.items.data[0].price.id;
-    const currentPeriodStart = new Date(
-      subscription.current_period_start * 1000,
-    );
-    const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+    const status: string = subscription.status;
+    const stripeSubId: string = subscription.id;
+    const item0 = subscription?.items?.data?.[0];
+    const stripePriceId: string | undefined = item0?.price?.id;
 
     // Find user by billing_id
     const user = await this.prisma.user.findFirst({
@@ -45,28 +56,99 @@ export class StripeService {
       return;
     }
 
-    // let plan = SubscriptionPlan.FREE;
-    // if (planId === appConfig().payment.stripe.price_monthly) {
-    //   plan = SubscriptionPlan.PREMIUM_MONTHLY;
-    // } else if (planId === appConfig().payment.stripe.price_yearly) {
-    //   plan = SubscriptionPlan.PREMIUM_YEARLY;
-    // }
+    if (!stripePriceId) {
+      this.logger.error(
+        `Stripe subscription ${stripeSubId} missing items.data[0].price.id`,
+      );
+      return;
+    }
 
-    // await this.prisma.subscription.upsert({
-    //   where: { user_id: user.id },
-    //   update: {
-    //     plan: status === 'active' || status === 'trialing' ? plan : SubscriptionPlan.FREE,
-    //     status: status,
-    //     started_at: currentPeriodStart,
-    //     expires_at: currentPeriodEnd,
-    //   },
-    //   create: {
-    //     user_id: user.id,
-    //     plan: status === 'active' || status === 'trialing' ? plan : SubscriptionPlan.FREE,
-    //     status: status,
-    //     started_at: currentPeriodStart,
-    //     expires_at: currentPeriodEnd,
-    //   },
-    // });
+    // Map Stripe price -> SubsPlan
+    const plan = await this.prisma.subsPlan.findFirst({
+      where: { stripePriceId },
+    });
+
+    if (!plan) {
+      this.logger.error(`SubsPlan not found for stripePriceId=${stripePriceId}`);
+      return;
+    }
+
+    const startUnix = this.pickUnixSeconds(
+      subscription.current_period_start,
+      item0?.current_period_start,
+      subscription.start_date,
+      subscription.created,
+    );
+    const endUnix = this.pickUnixSeconds(
+      subscription.current_period_end,
+      item0?.current_period_end,
+      subscription.ended_at,
+    );
+    const trialEndUnix = this.pickUnixSeconds(subscription.trial_end);
+    const now = new Date();
+
+    const hasPeriodEnd = !!endUnix;
+    const endDate = hasPeriodEnd ? new Date(endUnix! * 1000) : null;
+
+    const entitledByStatus = status === 'active' || status === 'trialing';
+    const entitledByEvent = eventType !== 'customer.subscription.deleted';
+    const entitledByDate = endDate ? endDate > now : true;
+    const isActive = entitledByStatus && entitledByEvent && entitledByDate;
+
+    const remainingDays = endDate
+      ? Math.max(
+          0,
+          Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 3600 * 24)),
+        )
+      : null;
+
+    const existing = await this.prisma.subscription.findFirst({
+      where: {
+        OR: [{ stripeSubId }, { userId: user.id }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const data: any = {
+      userId: user.id,
+      plan: { connect: { id: plan.id } },
+      stripeSubId,
+      status,
+      cancelAtPeriodEnd: !!subscription.cancel_at_period_end,
+      startDate: startUnix ? new Date(startUnix * 1000) : now,
+      endDate,
+      trialEndsAt: trialEndUnix ? new Date(trialEndUnix * 1000) : null,
+      remainingDays: remainingDays ?? undefined,
+      isTrial: status === 'trialing' || !!trialEndUnix,
+      isActive,
+      type: isActive ? String(plan.type) : SubscriptionPlan.FREE,
+      updatedAt: now,
+    };
+
+    if (existing) {
+      await this.prisma.subscription.update({
+        where: { id: existing.id },
+        data,
+      });
+    } else {
+      await this.prisma.subscription.create({
+        data: {
+          ...data,
+          createdAt: now,
+        },
+      });
+    }
+
+    // Optional mirror field on User for quick UI checks
+    try {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { IsSubscriptionActive: isActive },
+      });
+    } catch (e: any) {
+      this.logger.warn(
+        `Failed to update user.IsSubscriptionActive for user=${user.id}: ${e?.message || e}`,
+      );
+    }
   }
 }

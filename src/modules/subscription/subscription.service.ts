@@ -12,6 +12,10 @@ export class SubscriptionService {
   constructor(private prisma: PrismaService) {}
 
   async startTrial(user: any, planId: string) {
+    if (!user || !user.userId) {
+      throw new BadRequestException('Invalid user');
+    }
+
     // Check if user has ever used a trial
     const trialUsed = await this.prisma.subscription.findFirst({
       where: {
@@ -32,7 +36,10 @@ export class SubscriptionService {
       },
     });
 
-    if (activeSubscription && activeSubscription.type !== SubscriptionPlan.FREE) {
+    if (
+      activeSubscription &&
+      activeSubscription.type !== SubscriptionPlan.FREE
+    ) {
       throw new BadRequestException('User already has an active subscription');
     }
 
@@ -159,7 +166,6 @@ export class SubscriptionService {
   }
 
   async createProductAndPrice(dto: CreateProductAndPriceDto) {
-    
     const { product, price } = await StripePayment.createProductAndPrice({
       name: dto.name,
       unit_amount: Math.round(dto.price * 100), // Stripe requires cents
@@ -248,49 +254,58 @@ export class SubscriptionService {
         // trial_period_days: productRecord.trialDays,
       });
 
-      const existingSub = await this.prisma.subscription.findFirst({
-        where: { userId: dbUser.id },
-      });
+      // const existingSub = await this.prisma.subscription.findFirst({
+      //   where: { userId: dbUser.id },
+      // });
 
       let updatedSubscription;
+
+      const pickUnixSeconds = (...values: Array<any>) => {
+        for (const v of values) {
+          const n = typeof v === 'string' ? Number(v) : v;
+          if (typeof n === 'number' && Number.isFinite(n) && n > 0) return n;
+        }
+        return null;
+      };
+
+      const stripeSub: any = subscription as any;
+      const item0: any = stripeSub?.items?.data?.[0];
+      const startUnix = pickUnixSeconds(
+        stripeSub?.current_period_start,
+        item0?.current_period_start,
+        stripeSub?.start_date,
+        stripeSub?.created,
+      );
+      const endUnix = pickUnixSeconds(
+        stripeSub?.current_period_end,
+        item0?.current_period_end,
+        stripeSub?.ended_at,
+      );
+      const trialEndUnix = pickUnixSeconds(stripeSub?.trial_end);
+
       const subData = {
         userId: dbUser.id,
         isActive: true,
         plan: { connect: { id: productRecord.id } },
-        startDate: new Date(
-          ((subscription as any).current_period_start ||
-            (subscription as any).start_date ||
-            (subscription as any).created) * 1000,
-        ),
-        endDate: (subscription as any).ended_at
-          ? new Date((subscription as any).ended_at * 1000)
-          : (subscription as any).current_period_end
-            ? new Date((subscription as any).current_period_end * 1000)
-            : (subscription as any).trial_end
-              ? new Date((subscription as any).trial_end * 1000)
-              : null,
-        trialEndsAt: (subscription as any).trial_end
-          ? new Date((subscription as any).trial_end * 1000)
-          : null,
+        startDate: startUnix ? new Date(startUnix * 1000) : new Date(),
+        endDate: endUnix ? new Date(endUnix * 1000) : null,
+        trialEndsAt: trialEndUnix ? new Date(trialEndUnix * 1000) : null,
 
         stripeSubId: subscription.id,
         cancelAtPeriodEnd: (subscription as any).cancel_at_period_end || false,
         status: (subscription as any).status,
         type: productRecord.type.toUpperCase(),
-        isTrial: productRecord.trialDays > 0,
+        // isTrial: productRecord.trialDays > 0,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      if (existingSub) {
-        updatedSubscription = await this.prisma.subscription.update({
-          where: { id: existingSub.id },
-          data: subData,
-        });
-      } else {
+      if (subData) {
         updatedSubscription = await this.prisma.subscription.create({
           data: subData,
         });
+      } else {
+        throw new BadRequestException('Failed to create subscription record');
       }
 
       return {
