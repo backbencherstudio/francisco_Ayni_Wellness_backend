@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FirebaseStorageService } from '../firebase-storage/firebase-storage.service';
-import { startOfDay } from 'date-fns';
+import { addDays, startOfDay } from 'date-fns';
 import { NotificationService as AppNotificationService } from '../application/notification/notification.service';
 import { stat } from 'fs';
 
@@ -27,14 +27,29 @@ export class AiRoutinesService {
   }
 
   async generateToday(userId: string, opts?: { moodCheckId?: string }) {
-    const today = startOfDay(new Date());
 
-    const existing = await this.prisma.routine.findUnique({
-      where: { user_id_date: { user_id: userId, date: today } },
+    const today = startOfDay(new Date());
+    const nextDay = addDays(today, 1);
+
+    const existing = await this.prisma.routine.findFirst({
+      where: {
+        user_id: userId,
+        date: {
+          gte: today,
+          lt: nextDay,
+        },
+      },
     });
-    if (existing) return { success: true, routine: existing };
+    if (existing) {
+      return {
+        success: true,
+        message: 'Routine already exists for today',
+        routine: existing,
+      };
+    }
 
     let latestMoodCheckId = opts?.moodCheckId || null;
+
     if (!latestMoodCheckId) {
       const latestCheck = await this.prisma.routineMoodCheck.findFirst({
         where: { user_id: userId },
@@ -115,7 +130,6 @@ export class AiRoutinesService {
     const profile = await this.prisma.userRoutineProfile.findUnique({
       where: { user_id: userId },
     });
-
     const routine = await this.prisma.routine.create({
       data: {
         user_id: userId,
@@ -138,7 +152,6 @@ export class AiRoutinesService {
       include: { items: true },
     });
 
-    // Notify user that routine is ready
     try {
       await this.appNotification.createAndDispatch({
         receiver_id: userId,
@@ -359,6 +372,20 @@ export class AiRoutinesService {
       (Array.isArray(body.emotions) ? body.emotions[0] : undefined);
     const selectedStatements = body.prompts || body.statements || [];
     const description = body.description || body.note;
+
+    // check today already has mood check
+    const today = startOfDay(new Date());
+    const nextDay = addDays(today, 1);
+
+    const existingMoodCheck = await this.prisma.routineMoodCheck.findFirst({
+      where: {
+        user_id: userId,
+        created_at: { gte: today, lt: nextDay },
+      },
+    });
+    if (existingMoodCheck) {
+      return { success: false, message: 'Mood check already submitted today' };
+    }
 
     const check = await this.prisma.routineMoodCheck.create({
       data: {
