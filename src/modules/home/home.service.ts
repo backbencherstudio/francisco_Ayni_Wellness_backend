@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { startOfDay, getDay } from 'date-fns';
+import { startOfDay, getDay, addDays } from 'date-fns';
 
 interface HomeDashboardResponse {
   success: boolean;
-  date: string; 
+  date: string;
   greeting: { partOfDay: string; message: string };
   user: {
     id: string;
@@ -17,11 +17,11 @@ interface HomeDashboardResponse {
     total: number;
     completed: number;
     remaining: number;
-    percent: number; 
+    percent: number;
   };
   meditation_minutes: number;
   mood: {
-    score: number | null; 
+    score: number | null;
     entry_id: string | null;
   };
   meta: {
@@ -35,9 +35,11 @@ export class HomeService {
 
   async today(userId: string): Promise<HomeDashboardResponse> {
     const prismaAny: any = this.prisma as any;
-    // Use UTC midnight as canonical day boundary to match other services
-    const dayStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-    const nextDay = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1));
+
+    const dayStart = startOfDay(new Date());
+    const nextDay = addDays(dayStart, 1);
+
+    console.log('date', dayStart, nextDay);
 
     const [user, habits, logs, routine, todayMood] = await Promise.all([
       prismaAny.user.findFirst({ where: { id: userId } }),
@@ -65,9 +67,14 @@ export class HomeService {
       }),
     ]);
 
-    const isDueToday = (frequency?: string | null, today: Date = new Date()) => {
+    // console.log("prisma any", user, habits, logs, routine, todayMood);
+
+    const isDueToday = (
+      frequency?: string | null,
+      today: Date = new Date(),
+    ) => {
       if (!frequency) return true;
-      const dow = getDay(today); 
+      const dow = getDay(today);
       switch (frequency) {
         case 'Daily':
           return true;
@@ -85,7 +92,9 @@ export class HomeService {
     const dueHabits = habits.filter((h: any) => isDueToday(h.frequency));
     const totalHabits = dueHabits.length;
     const dueIds = dueHabits.map((h: any) => h.id);
-    const habitCompleted = logs.filter((l: any) => dueIds.includes(l.habit_id)).length;
+    const habitCompleted = logs.filter((l: any) =>
+      dueIds.includes(l.habit_id),
+    ).length;
     console.log('total habit', totalHabits);
     console.log('completed log', habitCompleted);
 

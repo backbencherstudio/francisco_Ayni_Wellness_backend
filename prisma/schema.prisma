@@ -927,7 +927,7 @@ model Routine {
   user_id String
   user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  date             DateTime // calendar day for which this routine applies (UTC day bucket)
+  date             DateTime @db.Timestamptz
   status           RoutineStatus     @default(generated)
   mood_entry_id    String?
   mood_check_id    String?
