@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "routines" ALTER COLUMN "date" SET DATA TYPE TIMESTAMPTZ;
