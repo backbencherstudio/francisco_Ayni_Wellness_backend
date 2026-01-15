@@ -1,8 +1,9 @@
 // external imports
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
+import { Prisma } from '@prisma/client';
 
 //internal imports
 import appConfig from '../../config/app.config';
@@ -23,6 +24,48 @@ export class AuthService {
     private mailService: MailService,
     @InjectRedis() private readonly redis: Redis,
   ) {}
+
+  private async ensureStripeCustomerAccount(userId: string) {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          billing_id: true,
+          email: true,
+          name: true,
+          first_name: true,
+          last_name: true,
+        },
+      });
+
+      if (!user || user.billing_id) return;
+      if (!user.email) return;
+
+      const resolvedName =
+        user.name ??
+        [user.first_name, user.last_name].filter(Boolean).join(' ').trim() ??
+        user.email;
+
+      const stripeCustomer = await StripePayment.createCustomer({
+        user_id: userId,
+        email: user.email,
+        name: resolvedName,
+      });
+
+      if (stripeCustomer?.id) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { billing_id: stripeCustomer.id },
+        });
+      }
+    } catch (err: any) {
+      // Billing should not block login.
+      console.warn(
+        'Stripe customer creation failed:',
+        err?.message || String(err),
+      );
+    }
+  }
 
   async me(userId: string) {
     try {
@@ -250,6 +293,9 @@ export class AuthService {
 
       const user = await UserRepository.getUserDetails(userId);
 
+      // Best-effort: ensure billing account exists (do not block login)
+      await this.ensureStripeCustomerAccount(userId);
+
       // store refreshToken
       await this.redis.set(
         `refresh_token:${user.id}`,
@@ -335,26 +381,7 @@ export class AuthService {
         60 * 60 * 24 * 7,
       );
 
-      // create stripe customer account id
-      try {
-        const stripeCustomer = await StripePayment.createCustomer({
-          user_id: user.id,
-          email: user.email,
-          name: `${user.first_name} ${user.last_name}`,
-        });
-
-        if (stripeCustomer) {
-          await this.prisma.user.update({
-            where: { id: user.id },
-            data: { billing_id: stripeCustomer.id },
-          });
-        }
-      } catch (error) {
-        return {
-          success: false,
-          message: 'User created but failed to create billing account',
-        };
-      }
+      await this.ensureStripeCustomerAccount(user.id);
 
       return {
         message: 'Logged in successfully',
@@ -398,26 +425,7 @@ export class AuthService {
         60 * 60 * 24 * 7,
       );
 
-      // create stripe customer account id
-      try {
-        const stripeCustomer = await StripePayment.createCustomer({
-          user_id: user.id,
-          email: user.email,
-          name: `${user.first_name} ${user.last_name}`,
-        });
-
-        if (stripeCustomer) {
-          await this.prisma.user.update({
-            where: { id: user.id },
-            data: { billing_id: stripeCustomer.id },
-          });
-        }
-      } catch (error) {
-        return {
-          success: false,
-          message: 'User created but failed to create billing account',
-        };
-      }
+      await this.ensureStripeCustomerAccount(user.id);
 
       return {
         message: 'Logged in successfully',
@@ -1011,4 +1019,227 @@ export class AuthService {
     }
   }
   // --------- end 2FA ---------
+
+  //  =====================================================================
+  async handleGoogleProfile(input: {
+    googleId: string;
+    email?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    avatar?: string | null;
+    latitude?: number;
+    longitude?: number;
+  }) {
+    const googleId = input.googleId;
+    const email = input.email?.toLowerCase?.() ?? undefined;
+    const firstName = input.firstName ?? undefined;
+    const lastName = input.lastName ?? undefined;
+    const avatar = input.avatar ?? undefined;
+
+    if (!googleId) {
+      throw new HttpException('googleId is required', HttpStatus.BAD_REQUEST);
+    }
+
+    // 1) Try by google_id first
+    let user = await this.prisma.user.findUnique({
+      where: { google_id: googleId },
+    });
+
+    // 2) If not found, try by email and link google_id
+    if (!user && email) {
+      const byEmail = await this.prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (byEmail) {
+        const enrichData: Prisma.UserUpdateInput = {
+          google_id: byEmail.google_id ?? googleId,
+          first_name: byEmail.first_name ?? firstName,
+          last_name: byEmail.last_name ?? lastName,
+          name:
+            byEmail.name ??
+            ([firstName, lastName].filter(Boolean).join(' ').trim() || null),
+          avatar: byEmail.avatar ?? avatar,
+          email_verified_at: byEmail.email_verified_at ?? new Date(),
+        };
+
+        try {
+          user = await this.prisma.user.update({
+            where: { id: byEmail.id },
+            data: enrichData,
+          });
+        } catch (e: any) {
+          if (e?.code === 'P2002') {
+            throw new HttpException(
+              'Google account is already linked to another user',
+              HttpStatus.CONFLICT,
+            );
+          }
+          throw e;
+        }
+      }
+    }
+
+    // 3) If still not found, create a new user
+    if (!user) {
+      const baseData: Prisma.UserCreateInput = {
+        google_id: googleId,
+        email: email,
+        first_name: firstName,
+        last_name: lastName,
+        name: [firstName, lastName].filter(Boolean).join(' ').trim() || null,
+        avatar: avatar,
+        email_verified_at: email ? new Date() : undefined,
+      };
+
+      try {
+        user = await this.prisma.user.create({ data: baseData });
+      } catch (e: any) {
+        // In case of a race (or unique constraint), recover by fetching the existing user.
+        if (e?.code === 'P2002') {
+          const existing = await this.prisma.user.findUnique({
+            where: { google_id: googleId },
+          });
+          if (existing) {
+            user = existing;
+          } else {
+            throw e;
+          }
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    // IMPORTANT: For mobile login, enforce the same geo rules as normal login.
+    const loginResponse = await this.login({
+      email: user.email,
+      userId: user.id
+    });
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: loginResponse?.message ?? 'Logged in successfully',
+      authorization: loginResponse?.authorization,
+      type: loginResponse?.type ?? user?.type,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+      },
+    };
+  }
+
+  async handleAppleProfile(input: {
+    appleId: string;
+    email?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    latitude?: number;
+    longitude?: number;
+  }) {
+    const appleId = input.appleId;
+    const email = input.email?.toLowerCase?.() ?? undefined;
+    const firstName = input.firstName ?? undefined;
+    const lastName = input.lastName ?? undefined;
+
+    if (!appleId) {
+      throw new HttpException('appleId is required', HttpStatus.BAD_REQUEST);
+    }
+
+    // 1) Try by apple_id first
+    let user = await this.prisma.user.findUnique({
+      where: { apple_id: appleId },
+    });
+
+    // 2) If not found, try by email and link apple_id (best effort)
+    if (!user && email) {
+      const byEmail = await this.prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (byEmail) {
+        const enrichData: Prisma.UserUpdateInput = {
+          apple_id: byEmail.apple_id ?? appleId,
+          first_name: byEmail.first_name ?? firstName,
+          last_name: byEmail.last_name ?? lastName,
+          name:
+            byEmail.name ??
+            ([firstName, lastName].filter(Boolean).join(' ').trim() || null),
+          email_verified_at: byEmail.email_verified_at ?? new Date(),
+        };
+
+        try {
+          user = await this.prisma.user.update({
+            where: { id: byEmail.id },
+            data: enrichData,
+          });
+        } catch (e: any) {
+          if (e?.code === 'P2002') {
+            throw new HttpException(
+              'Apple account is already linked to another user',
+              HttpStatus.CONFLICT,
+            );
+          }
+          throw e;
+        }
+      }
+    }
+
+    // 3) If still not found, create a new user
+    if (!user) {
+      const resolvedEmail = email ?? `apple_${appleId}@appleid.local`;
+
+      const baseData: Prisma.UserCreateInput = {
+        apple_id: appleId,
+        email: resolvedEmail,
+        first_name: firstName,
+        last_name: lastName,
+        name: [firstName, lastName].filter(Boolean).join(' ').trim() || null,
+        email_verified_at: new Date(),
+      };
+
+      
+
+      try {
+        user = await this.prisma.user.create({ data: baseData });
+      } catch (e: any) {
+        if (e?.code === 'P2002') {
+          // If this was a race on apple_id, recover by fetching.
+          const existing = await this.prisma.user.findUnique({
+            where: { apple_id: appleId },
+          });
+          if (existing) {
+            user = existing;
+          } else {
+            // If the generated placeholder email collides (unlikely), make it unique.
+            baseData.email = `apple_${appleId}_${StringHelper.randomString(6)}@appleid.local`;
+            user = await this.prisma.user.create({ data: baseData });
+          }
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    const loginResponse = await this.login({
+      email: user.email,
+      userId: user.id,
+    });
+
+    return {
+      success: true,
+      message: loginResponse?.message ?? 'Logged in successfully',
+      authorization: loginResponse?.authorization,
+      type: loginResponse?.type ?? user?.type,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+      },
+    };
+  }
 }
