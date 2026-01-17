@@ -1027,8 +1027,6 @@ export class AuthService {
     firstName?: string | null;
     lastName?: string | null;
     avatar?: string | null;
-    latitude?: number;
-    longitude?: number;
   }) {
     const googleId = input.googleId;
     const email = input.email?.toLowerCase?.() ?? undefined;
@@ -1137,8 +1135,6 @@ export class AuthService {
     email?: string | null;
     firstName?: string | null;
     lastName?: string | null;
-    latitude?: number;
-    longitude?: number;
   }) {
     const appleId = input.appleId;
     const email = input.email?.toLowerCase?.() ?? undefined;
@@ -1147,6 +1143,11 @@ export class AuthService {
 
     if (!appleId) {
       throw new HttpException('appleId is required', HttpStatus.BAD_REQUEST);
+    }
+
+    // Validate email format if provided
+    if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      throw new HttpException('Invalid email format', HttpStatus.BAD_REQUEST);
     }
 
     // 1) Try by apple_id first
@@ -1190,7 +1191,18 @@ export class AuthService {
 
     // 3) If still not found, create a new user
     if (!user) {
-      const resolvedEmail = email ?? `apple_${appleId}@appleid.local`;
+      let resolvedEmail = email ?? `apple_${appleId}@appleid.local`;
+
+      // Check if email already exists (for placeholder emails)
+      if (!email) {
+        const existingWithEmail = await this.prisma.user.findUnique({
+          where: { email: resolvedEmail },
+        });
+        if (existingWithEmail) {
+          // Generate unique placeholder email
+          resolvedEmail = `apple_${appleId}_${StringHelper.randomString(8)}@appleid.local`;
+        }
+      }
 
       const baseData: Prisma.UserCreateInput = {
         apple_id: appleId,
@@ -1200,8 +1212,6 @@ export class AuthService {
         name: [firstName, lastName].filter(Boolean).join(' ').trim() || null,
         email_verified_at: new Date(),
       };
-
-      
 
       try {
         user = await this.prisma.user.create({ data: baseData });
@@ -1214,8 +1224,8 @@ export class AuthService {
           if (existing) {
             user = existing;
           } else {
-            // If the generated placeholder email collides (unlikely), make it unique.
-            baseData.email = `apple_${appleId}_${StringHelper.randomString(6)}@appleid.local`;
+            // If the generated placeholder email still collides, make it more unique.
+            baseData.email = `apple_${appleId}_${StringHelper.randomString(12)}@appleid.local`;
             user = await this.prisma.user.create({ data: baseData });
           }
         } else {
@@ -1231,6 +1241,7 @@ export class AuthService {
 
     return {
       success: true,
+      statusCode: 200,
       message: loginResponse?.message ?? 'Logged in successfully',
       authorization: loginResponse?.authorization,
       type: loginResponse?.type ?? user?.type,

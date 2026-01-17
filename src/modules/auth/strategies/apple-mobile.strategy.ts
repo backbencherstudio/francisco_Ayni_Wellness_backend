@@ -27,13 +27,6 @@ export class AppleMobileStrategy extends PassportStrategy(
       throw new UnauthorizedException('identityToken is required');
     }
 
-    const latitudeRaw = body.latitude ?? req.headers['x-latitude'];
-    const longitudeRaw = body.longitude ?? req.headers['x-longitude'];
-    const latitude =
-      latitudeRaw === undefined ? undefined : Number.parseFloat(String(latitudeRaw));
-    const longitude =
-      longitudeRaw === undefined ? undefined : Number.parseFloat(String(longitudeRaw));
-
     const audiences = [
       appConfig().auth.apple.client_id,
       process.env.APPLE_MOBILE_CLIENT_IDS,
@@ -68,8 +61,6 @@ export class AppleMobileStrategy extends PassportStrategy(
       email: emailFromToken ?? emailFromBody,
       firstName: typeof body.firstName === 'string' ? body.firstName : undefined,
       lastName: typeof body.lastName === 'string' ? body.lastName : undefined,
-      latitude,
-      longitude,
     });
   }
 }

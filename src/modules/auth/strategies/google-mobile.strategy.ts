@@ -21,13 +21,6 @@ export class GoogleMobileStrategy extends PassportStrategy(
     const idToken: string | undefined =
       body.idToken ?? body.id_token ?? body.token ?? body.credential;
 
-     const latitudeRaw = body.latitude ?? req.headers['x-latitude'];
-     const longitudeRaw = body.longitude ?? req.headers['x-longitude'];
-     const latitude =
-       latitudeRaw === undefined ? undefined : Number.parseFloat(String(latitudeRaw));
-     const longitude =
-       longitudeRaw === undefined ? undefined : Number.parseFloat(String(longitudeRaw));
-
     if (!idToken || typeof idToken !== 'string') {
       throw new UnauthorizedException('idToken is required');
     }
@@ -38,12 +31,22 @@ export class GoogleMobileStrategy extends PassportStrategy(
       process.env.GOOGLE_MOBILE_APP_IDS,
     ]
       .filter(Boolean)
-      .flatMap((v) => String(v).split(',').map((s) => s.trim()))
+      .flatMap((v) =>
+        String(v)
+          .split(',')
+          .map((s) => s.trim()),
+      )
       .filter(Boolean);
 
     if (audiences.length === 0) {
-      throw new UnauthorizedException('Google client id (audience) is not configured');
+      throw new UnauthorizedException(
+        'Google client id (audience) is not configured',
+      );
     }
+
+    // GoogleMobileStrategy.validate()
+    console.log('Google audiences:', audiences);
+    console.log('Received idToken length:', idToken?.length);
 
     const ticket = await this.client.verifyIdToken({
       idToken,
@@ -55,14 +58,18 @@ export class GoogleMobileStrategy extends PassportStrategy(
       throw new UnauthorizedException('Invalid Google token');
     }
 
+    console.log('Google payload:', {
+      sub: payload.sub,
+      email: payload.email,
+      aud: payload.aud,
+    });
+
     return this.authService.handleGoogleProfile({
       googleId: payload.sub,
       email: payload.email,
       firstName: (payload as any).given_name,
       lastName: (payload as any).family_name,
       avatar: (payload as any).picture,
-      latitude,
-      longitude,
     });
   }
 }

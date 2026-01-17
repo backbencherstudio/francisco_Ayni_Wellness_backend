@@ -1,6 +1,6 @@
 // external imports
 import { MiddlewareConsumer, Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 // import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 // import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
@@ -34,6 +34,7 @@ import { FirebaseStorageModule } from './modules/firebase-storage/firebase-stora
 import { HomeModule } from './modules/home/home.module';
 import { AiRoutinesModule } from './modules/ai-routines/ai-routines.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
+import { HttpResponseInterceptor } from './common/interceptor/http-response.interceptor';
 
 
 @Module({
@@ -81,6 +82,10 @@ import { RemindersModule } from './modules/reminders/reminders.module';
   ],
   controllers: [AppController],
   providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpResponseInterceptor,
+    },
     AppService,
     // {
     //   provide: APP_GUARD,
