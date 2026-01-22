@@ -16,37 +16,37 @@ export class SubscriptionController {
 
   @ApiOperation({ summary: 'Start Trial Subscription' })
   @Post('start-trial')
-  startTrial(@GetUser() user, @Body('planId') planId: string) {
+  startTrial(@GetUser() user, @Body('planId') planId: string): Promise<any> {
     return this.subscriptionService.startTrial(user, planId);
   }
 
   @ApiOperation({ summary: 'create product & price' })
   @Post('create-product-price')
-  createProductAndPrice(@Body() dto: CreateProductAndPriceDto) {
+  createProductAndPrice(@Body() dto: CreateProductAndPriceDto): Promise<any> {
     return this.subscriptionService.createProductAndPrice(dto);
   }
 
   @ApiOperation({ summary: 'Add card' })
   @Post('add/cards')
-  addCard(@GetUser() user, @Body() addCardDto: AddCardDto) {
+  addCard(@GetUser() user, @Body() addCardDto: AddCardDto): Promise<any> {
     return this.subscriptionService.addCard(user, addCardDto);
   }
 
   @ApiOperation({ summary: 'Get User Subscription Status' })
   @Get('status')
-  getSubscriptionStatus(@GetUser() user) {
+  getSubscriptionStatus(@GetUser() user): Promise<any> {
     return this.subscriptionService.getSubscriptionStatus(user.userId);
   }
 
   @ApiOperation({ summary: 'get all plans' })
   @Get('plans')
-  getAllPlans() {
+  getAllPlans(): Promise<any> {
     return this.subscriptionService.getAllPlans();
   }
 
   @ApiOperation({ summary: 'Cancel Subscription' })
   @Post('cancel')
-  cancelSubscription(@GetUser('userId') userId: string) {
+  cancelSubscription(@GetUser('userId') userId: string): Promise<any> {
     return this.subscriptionService.cancelSubscription(userId);
   }
 }

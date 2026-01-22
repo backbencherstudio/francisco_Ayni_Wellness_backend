@@ -121,4 +121,110 @@ export class MailService {
     }
   }
 
+  // ===== SUBSCRIPTION EMAILS =====
+
+  async sendTrialStartedEmail(params: {
+    email: string;
+    name: string;
+    endDate: Date;
+    trialDays: number;
+  }) {
+    try {
+      const subject = `Your ${params.trialDays}-Day Free Trial Has Started!`;
+
+      await this.queue.add('sendTrialStartedEmail', {
+        to: params.email,
+        subject,
+        template: 'trial-started.ejs',
+        context: {
+          appName: appConfig().app.name,
+          name: params.name,
+          trialDays: params.trialDays,
+          endDate: params.endDate.toDateString(),
+          dashboardUrl: appConfig().app.client_app_url,
+        },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async sendSubscriptionConfirmedEmail(params: {
+    email: string;
+    name: string;
+    planName: string;
+    amount: number;
+    currency: string;
+    renewalDate: Date;
+  }) {
+    try {
+      const subject = `Subscription Confirmed - ${params.planName}`;
+
+      await this.queue.add('sendSubscriptionConfirmedEmail', {
+        to: params.email,
+        subject,
+        template: 'subscription-confirmed.ejs',
+        context: {
+          appName: appConfig().app.name,
+          name: params.name,
+          planName: params.planName,
+          amount: params.amount,
+          currency: params.currency,
+          renewalDate: params.renewalDate.toDateString(),
+          dashboardUrl: appConfig().app.client_app_url,
+        },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async sendSubscriptionCanceledEmail(params: {
+    email: string;
+    name: string;
+  }) {
+    try {
+      const subject = 'Your Subscription Has Been Canceled';
+
+      await this.queue.add('sendSubscriptionCanceledEmail', {
+        to: params.email,
+        subject,
+        template: 'subscription-canceled.ejs',
+        context: {
+          appName: appConfig().app.name,
+          name: params.name,
+          supportEmail: appConfig().mail.from,
+          dashboardUrl: appConfig().app.client_app_url,
+        },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async sendTrialEndingSoonEmail(params: {
+    email: string;
+    name: string;
+    daysRemaining: number;
+    endDate: Date;
+  }) {
+    try {
+      const subject = `Your Trial Ends in ${params.daysRemaining} Days`;
+
+      await this.queue.add('sendTrialEndingSoonEmail', {
+        to: params.email,
+        subject,
+        template: 'trial-ending-soon.ejs',
+        context: {
+          appName: appConfig().app.name,
+          name: params.name,
+          daysRemaining: params.daysRemaining,
+          endDate: params.endDate.toDateString(),
+          upgradeUrl: `${appConfig().app.client_app_url}/subscription/upgrade`,
+        },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  }
 }
