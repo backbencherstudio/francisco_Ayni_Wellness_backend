@@ -3,9 +3,10 @@ import { SubscriptionService } from './subscription.service';
 import { SubscriptionController } from './subscription.controller';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { SubscriptionSchedulerService } from './subscription.scheduler';
+import { MailModule } from '../../mail/mail.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, MailModule],
   controllers: [SubscriptionController],
   providers: [SubscriptionService, SubscriptionSchedulerService],
 })

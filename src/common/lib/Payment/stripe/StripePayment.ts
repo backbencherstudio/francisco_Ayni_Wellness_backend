@@ -520,6 +520,10 @@ export class StripePayment {
     return Stripe.subscriptions.cancel(subscriptionId);
   }
 
+  static async getSubscription(subscriptionId: string): Promise<stripe.Subscription> {
+    return Stripe.subscriptions.retrieve(subscriptionId);
+  }
+
   static handleWebhook(rawBody: string, sig: string | string[]): stripe.Event {
     const event = Stripe.webhooks.constructEvent(
       rawBody,
