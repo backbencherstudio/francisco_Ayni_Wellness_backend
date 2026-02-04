@@ -325,7 +325,9 @@ export class HabitService {
       orderBy: { created_at: 'desc' },
     });
 
-    const due = habits.filter((h) => this.isDueToday(h.frequency as any));
+    const due = habits.filter((h) =>
+      this.isDueToday(h.frequency as any, today),
+    );
     const ids = due.map((h) => h.id);
 
     const logs = await (this.prisma as any).habitLog.findMany({
