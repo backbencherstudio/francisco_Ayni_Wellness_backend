@@ -1,7 +1,12 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { startOfDay, subDays, startOfMonth, subMonths } from 'date-fns';
 import { RoutineItemStatus, RoutineStatus } from '@prisma/client';
+
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 export interface PeriodSummary {
   period: 'week' | 'month' | 'year';
@@ -34,6 +39,20 @@ export interface HabitProgressRow {
 export class StatsService {
   constructor(private prisma: PrismaService) {}
 
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return user?.timezone || 'UTC';
+  }
+
+  private dayRangeInTz(tz: string) {
+    const start = dayjs().tz(tz).startOf('day').toDate();
+    const end = dayjs().tz(tz).endOf('day').toDate();
+    return { start, end };
+  }
+
   // ---------- Public API Methods (called by controller) -----------------
   async summary(
     userId: string,
@@ -41,9 +60,11 @@ export class StatsService {
   ): Promise<PeriodSummary> {
     if (!userId) throw new BadRequestException('User required');
 
+    const tz = await this.getUserTimezone(userId);
     const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
-    const end = startOfDay(new Date());
-    const start = startOfDay(subDays(end, days - 1));
+    const { start: endDay } = this.dayRangeInTz(tz);
+    const end = dayjs(endDay).tz(tz).endOf('day').toDate();
+    const start = dayjs(endDay).tz(tz).subtract(days - 1, 'days').startOf('day').toDate();
 
     const [habits, logs, moodAggs] = await Promise.all([
       this.prisma.habit.findMany({
@@ -80,12 +101,12 @@ export class StatsService {
       : [];
 
     const routineGeneratedByDay = new Set<number>(
-      routines.map((r) => startOfDay(new Date(r.date)).getTime()),
+      routines.map((r) => dayjs(r.date).tz(tz).startOf('day').valueOf()),
     );
     const routineCompletedByDay = new Set<number>(
       routines
         .filter((r) => r.status === RoutineStatus.completed || r.completed_at)
-        .map((r) => startOfDay(new Date(r.date)).getTime()),
+        .map((r) => dayjs(r.date).tz(tz).startOf('day').valueOf()),
     );
 
     // Combined completion and minutes
@@ -118,7 +139,7 @@ export class StatsService {
       if (entries.length) {
         const byDay: Record<number, number[]> = {};
         for (const e of entries) {
-          const d = startOfDay(new Date(e.created_at)).getTime();
+          const d = dayjs(e.created_at).tz(tz).startOf('day').valueOf();
           (byDay[d] = byDay[d] || []).push(e.score);
         }
         const dailyAverages: number[] = Object.values(byDay).map((scores) =>
@@ -163,9 +184,11 @@ export class StatsService {
 
     if (period === 'year') return this.yearlyProgress(userId);
 
+    const tz = await this.getUserTimezone(userId);
     const days = period === 'week' ? 7 : 30;
-    const end = startOfDay(new Date());
-    const start = startOfDay(subDays(end, days - 1));
+    const { start: endDay } = this.dayRangeInTz(tz);
+    const end = dayjs(endDay).tz(tz).endOf('day').toDate();
+    const start = dayjs(endDay).tz(tz).subtract(days - 1, 'days').startOf('day').toDate();
 
     // Routine-only progress
     const [routines, items, moodAggs, moodEntriesInRange] = await Promise.all([
@@ -188,7 +211,7 @@ export class StatsService {
 
     const moodMap = new Map(
       moodAggs.map((a) => [
-        startOfDay(new Date(a.date)).getTime(),
+        dayjs(a.date).tz(tz).startOf('day').valueOf(),
         a.avg_score,
       ]),
     );
@@ -197,7 +220,7 @@ export class StatsService {
     if (moodEntriesInRange.length) {
       const byDay: Record<number, number[]> = {};
       for (const e of moodEntriesInRange) {
-        const key = startOfDay(new Date(e.created_at)).getTime();
+        const key = dayjs(e.created_at).tz(tz).startOf('day').valueOf();
         (byDay[key] = byDay[key] || []).push(e.score);
       }
       for (const [k, arr] of Object.entries(byDay)) {
@@ -214,7 +237,7 @@ export class StatsService {
     // Map routine per day and aggregate items
     const routineIdByDay: Record<number, string> = {};
     for (const r of routines) {
-      const key = startOfDay(new Date(r.date)).getTime();
+      const key = dayjs(r.date).tz(tz).startOf('day').valueOf();
       routineIdByDay[key] = r.id;
     }
     const itemsByRoutine: Record<string, { total: number; completed: number }> = {};
@@ -227,12 +250,12 @@ export class StatsService {
 
     const rows: DailyProgressRow[] = [];
     for (let i = 0; i < days; i++) {
-      const d = startOfDay(subDays(end, days - 1 - i));
-  const key = d.getTime();
-  const routineId = routineIdByDay[key];
-  const totals = routineId ? itemsByRoutine[routineId] : undefined;
-  const completed = totals ? totals.completed : 0;
-  const total = totals ? totals.total : 0;
+      const d = dayjs(endDay).tz(tz).subtract(days - 1 - i, 'days').startOf('day').toDate();
+      const key = dayjs(d).tz(tz).startOf('day').valueOf();
+      const routineId = routineIdByDay[key];
+      const totals = routineId ? itemsByRoutine[routineId] : undefined;
+      const completed = totals ? totals.completed : 0;
+      const total = totals ? totals.total : 0;
 
       rows.push({
         date: d.toISOString(),
@@ -261,8 +284,9 @@ export class StatsService {
 
   private async yearlyProgress(userId: string) {
     const months = 12;
-    const endMonthStart = startOfMonth(new Date());
-    const startMonth = startOfMonth(subMonths(endMonthStart, months - 1));
+    const tz = await this.getUserTimezone(userId);
+    const endMonthStart = dayjs().tz(tz).startOf('month').toDate();
+    const startMonth = dayjs(endMonthStart).tz(tz).subtract(months - 1, 'months').toDate();
     const [moodAggs, routines, items, moodEntries] = await Promise.all([
       this.prisma.moodDailyAggregate.findMany({
         where: {
@@ -285,13 +309,13 @@ export class StatsService {
     ]);
     const moodMonthMap: Record<number, number[]> = {};
     for (const m of moodAggs) {
-      const ms = startOfMonth(new Date(m.date)).getTime();
+      const ms = dayjs(m.date).tz(tz).startOf('month').valueOf();
       (moodMonthMap[ms] = moodMonthMap[ms] || []).push(m.avg_score);
     }
     // Build month-level mood averages from raw entries as fallback
     const moodMonthEntryMap: Record<number, number[]> = {};
     for (const me of moodEntries) {
-      const ms = startOfMonth(new Date(me.created_at)).getTime();
+      const ms = dayjs(me.created_at).tz(tz).startOf('month').valueOf();
       (moodMonthEntryMap[ms] = moodMonthEntryMap[ms] || []).push(me.score);
     }
     // All-time mood average for last resort
@@ -302,7 +326,7 @@ export class StatsService {
     const allTimeAvg = overallMood._avg?.score as number | null | undefined;
     const routineMonth: Record<string, number> = {};
     for (const r of routines) {
-      routineMonth[r.id] = startOfMonth(new Date(r.date)).getTime();
+      routineMonth[r.id] = dayjs(r.date).tz(tz).startOf('month').valueOf();
     }
     const monthTotals: Record<number, { total: number; completed: number }> = {};
     for (const it of items) {
@@ -314,8 +338,8 @@ export class StatsService {
     }
     const rows: any[] = [];
     for (let i = 0; i < months; i++) {
-      const monthStart = startOfMonth(subMonths(endMonthStart, months - 1 - i));
-      const ms = monthStart.getTime();
+      const monthStart = dayjs(endMonthStart).tz(tz).subtract(months - 1 - i, 'months').startOf('month').toDate();
+      const ms = dayjs(monthStart).tz(tz).startOf('month').valueOf();
       const totals = monthTotals[ms] || { total: 0, completed: 0 };
       const completed = totals.completed;
       const total = totals.total;
@@ -357,9 +381,10 @@ export class StatsService {
     period: 'week' | 'month' | 'year' = 'month',
   ): Promise<{ period: string; habits: HabitProgressRow[] }> {
     if (!userId) throw new BadRequestException('User required');
-    const now = startOfDay(new Date());
+    const tz = await this.getUserTimezone(userId);
+    const { start: now } = this.dayRangeInTz(tz);
     const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
-    const from = startOfDay(subDays(now, days - 1));
+    const from = dayjs(now).tz(tz).subtract(days - 1, 'days').startOf('day').toDate();
     const habits = await this.prisma.habit.findMany({
       where: { user_id: userId, status: 1, deleted_at: null },
       orderBy: { created_at: 'asc' },
@@ -396,9 +421,10 @@ export class StatsService {
     period: 'week' | 'month' | 'year' = 'month',
   ) {
     if (!userId) throw new BadRequestException('User required');
-    const now = startOfDay(new Date());
+    const tz = await this.getUserTimezone(userId);
+    const { start: now } = this.dayRangeInTz(tz);
     const days = period === 'week' ? 7 : period === 'month' ? 30 : 365;
-    const from = startOfDay(subDays(now, days - 1));
+    const from = dayjs(now).tz(tz).subtract(days - 1, 'days').startOf('day').toDate();
     const denominator = period === 'week' ? 7 : period === 'month' ? 30 : 365;
     const categories = ['Meditation', 'SoundHealing', 'Journaling', 'Podcast'];
     const habits = await this.prisma.habit.findMany({
@@ -515,12 +541,14 @@ export class StatsService {
 
   async overallProgress(userId: string) {
     if (!userId) throw new BadRequestException('User required');
+    const tz = await this.getUserTimezone(userId);
     const habits = await this.prisma.habit.findMany({
       where: { user_id: userId, status: 1, deleted_at: null },
     });
     // last 30 days completion vs potential (combined habits + routines)
-    const end = startOfDay(new Date());
-    const start = startOfDay(subDays(end, 29));
+    const { start: endDay } = this.dayRangeInTz(tz);
+    const end = dayjs(endDay).tz(tz).endOf('day').toDate();
+    const start = dayjs(endDay).tz(tz).subtract(29, 'days').startOf('day').toDate();
     const [logs, routines] = await Promise.all([
       this.prisma.habitLog.findMany({
         where: { user_id: userId, day: { gte: start, lte: end } },
@@ -531,12 +559,12 @@ export class StatsService {
       }),
     ]);
     const routineGeneratedByDay = new Set<number>(
-      routines.map((r) => startOfDay(new Date(r.date)).getTime()),
+      routines.map((r) => dayjs(r.date).tz(tz).startOf('day').valueOf()),
     );
     const routineCompletedByDay = new Set<number>(
       routines
         .filter((r) => r.status === RoutineStatus.completed || r.completed_at)
-        .map((r) => startOfDay(new Date(r.date)).getTime()),
+        .map((r) => dayjs(r.date).tz(tz).startOf('day').valueOf()),
     );
     const potential = habits.length * 30 + routineGeneratedByDay.size;
     const completed = logs.length + routineCompletedByDay.size;
@@ -546,8 +574,9 @@ export class StatsService {
 
   // ---------- Internal Helpers ------------------------------------------
   private async computeOverallStreak(userId: string, maxDays = 400) {
-    const end = startOfDay(new Date());
-    const from = startOfDay(subDays(end, maxDays - 1));
+    const tz = await this.getUserTimezone(userId);
+    const { start: end } = this.dayRangeInTz(tz);
+    const from = dayjs(end).tz(tz).subtract(maxDays - 1, 'days').startOf('day').toDate();
     const [logs, routines] = await Promise.all([
       this.prisma.habitLog.findMany({
         where: { user_id: userId, day: { lte: end, gte: from } },
@@ -558,13 +587,13 @@ export class StatsService {
         select: { date: true, status: true, completed_at: true },
       }),
     ]);
-    const habitDays = logs.map((l) => startOfDay(new Date(l.day)).getTime());
+    const habitDays = logs.map((l) => dayjs(l.day).tz(tz).startOf('day').valueOf());
     const routineDays = routines
       .filter((r) => r.status === RoutineStatus.completed || r.completed_at)
-      .map((r) => startOfDay(new Date(r.date)).getTime());
+      .map((r) => dayjs(r.date).tz(tz).startOf('day').valueOf());
     const daySet = new Set<number>([...habitDays, ...routineDays]);
     let streak = 0;
-    let cursor = end.getTime();
+    let cursor = dayjs(end).tz(tz).startOf('day').valueOf();
     const dayMs = 86400000;
     for (let i = 0; i < maxDays; i++) {
       if (daySet.has(cursor)) {
@@ -580,20 +609,21 @@ export class StatsService {
     habitId: string,
     maxDays = 365,
   ) {
-    const end = startOfDay(new Date());
+    const tz = await this.getUserTimezone(userId);
+    const { start: end } = this.dayRangeInTz(tz);
     const logs = await this.prisma.habitLog.findMany({
       where: {
         user_id: userId,
         habit_id: habitId,
-        day: { lte: end, gte: subDays(end, maxDays - 1) },
+        day: { lte: end, gte: dayjs(end).tz(tz).subtract(maxDays - 1, 'days').toDate() },
       },
       select: { day: true },
     });
     const daySet = new Set(
-      logs.map((l) => startOfDay(new Date(l.day)).getTime()),
+      logs.map((l) => dayjs(l.day).tz(tz).startOf('day').valueOf()),
     );
     let streak = 0;
-    let cursor = end.getTime();
+    let cursor = dayjs(end).tz(tz).startOf('day').valueOf();
     const dayMs = 86400000;
     for (let i = 0; i < maxDays; i++) {
       if (daySet.has(cursor)) {
@@ -637,9 +667,10 @@ export class StatsService {
 
   private async allDailyForMonth(userId: string) {
     // Condition: for each of last 30 days, the routine exists and is completed
-    const end = startOfDay(new Date());
+    const tz = await this.getUserTimezone(userId);
+    const { start: endDay } = this.dayRangeInTz(tz);
     for (let i = 0; i < 30; i++) {
-      const day = startOfDay(subDays(end, i));
+      const day = dayjs(endDay).tz(tz).subtract(i, 'days').startOf('day').toDate();
       const r = await this.prisma.routine.findFirst({
         where: { user_id: userId, date: day },
         select: { status: true, completed_at: true },

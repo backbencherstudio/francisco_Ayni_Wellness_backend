@@ -25,6 +25,14 @@ export class RemindersService {
     private prisma: PrismaService,
   ) {}
 
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return user?.timezone || 'UTC';
+  }
+
   // Helpers
   private normalizeTime(raw?: string) {
     if (!raw) return undefined;
@@ -153,6 +161,8 @@ export class RemindersService {
     const time = this.normalizeTime(reminder_time);
     const window = prefKey ? (prefKey as string).toLowerCase() : undefined;
 
+    const effectiveTz = tz || (await this.getUserTimezone(userId));
+
     // Determine target type and compute scheduling rules per requirements
     let daysStr: string | null = null;
     let scheduled_at: Date | null = null;
@@ -165,20 +175,62 @@ export class RemindersService {
       });
       if (!h) throw new NotFoundException('Habit not found');
       if (!label && h.habit_name) label = h.habit_name;
-      daysStr = this.daysForFrequency(h.frequency as any, tz);
+      daysStr = this.daysForFrequency(h.frequency as any, effectiveTz);
       scheduled_at = null;
     }
 
     if (routine_id) {
       if (!label) label = 'Routine Reminder';
       if (!time) throw new BadRequestException('reminder_time is required');
-      const z = tz || 'UTC';
-      const todayInTz = dayjs().tz(z).format('YYYY-MM-DD');
-      scheduled_at = this.buildScheduledAt(todayInTz, time, z);
+      const nowInTz = dayjs().tz(effectiveTz);
+      const todayInTz = nowInTz.format('YYYY-MM-DD');
+      const reminderTimeToday = dayjs.tz(`${todayInTz} ${time}`, 'YYYY-MM-DD HH:mm:ss', effectiveTz);
+      
+      // If reminder time has already passed today, schedule for tomorrow
+      let targetDate = todayInTz;
+      if (nowInTz.isAfter(reminderTimeToday)) {
+        targetDate = nowInTz.add(1, 'day').format('YYYY-MM-DD');
+      }
+      
+      scheduled_at = this.buildScheduledAt(targetDate, time, effectiveTz);
       daysStr = null; // not used
     }
 
-    // Prevent duplicate time slots per user (only one active reminder at a given time)
+    // Prevent multiple reminders per habit/routine and duplicate time slots
+    if (habit_id) {
+      const existingForHabit = await this.prisma.reminders.findFirst({
+        where: {
+          user_id: userId,
+          habit_id: habit_id,
+          active: true,
+        },
+      });
+
+      if (existingForHabit) {
+        return {
+          success: false,
+          message: 'This habit already has a reminder. Please edit it instead.',
+        };
+      }
+    }
+
+    if (routine_id) {
+      const existingForRoutine = await this.prisma.reminders.findFirst({
+        where: {
+          user_id: userId,
+          routine_id: routine_id,
+          active: true,
+        },
+      });
+
+      if (existingForRoutine) {
+        return {
+          success: false,
+          message: 'This routine already has a reminder. Please edit it instead.',
+        };
+      }
+    }
+
     const existingReminder = await this.prisma.reminders.findFirst({
       where: {
         user_id: userId,
@@ -202,7 +254,7 @@ export class RemindersService {
         name: label,
         time: time || null,
         days: daysStr,
-        tz: tz || 'UTC',
+        tz: effectiveTz,
         window: window,
         active: true,
         scheduled_at,
@@ -250,7 +302,8 @@ export class RemindersService {
       where: { user_id: userId, active: true },
     });
 
-    const today = dayjs.utc(now).format('YYYY-MM-DD');
+    const tz = await this.getUserTimezone(userId);
+    const today = dayjs(now).tz(tz).format('YYYY-MM-DD');
 
     const upcoming = items
       .map((r) => {
@@ -267,7 +320,9 @@ export class RemindersService {
           when = this.buildScheduledAt(dayInTz, t!, z);
         }
         if (!when) return null;
-        if (dayjs.utc(when).format('YYYY-MM-DD') !== today) return null;
+        // Check if reminder is today in user's timezone
+        const reminderDateInUserTz = dayjs(when).tz(tz).format('YYYY-MM-DD');
+        if (reminderDateInUserTz !== today) return null;
         if (when < now) return null;
         return {
           id: r.id,
@@ -322,7 +377,8 @@ export class RemindersService {
       (dto as any).days !== undefined
         ? this.normalizeDays((dto as any).days)
         : r.days;
-    const tz = (dto as any).tz || r.tz || 'UTC';
+    const tz =
+      (dto as any).tz || r.tz || (await this.getUserTimezone(userId));
 
     const window = prefKey ? (prefKey as string).toLowerCase() : r.window;
 
@@ -345,8 +401,23 @@ export class RemindersService {
       };
     }
 
-    if ((dto as any).date && time)
+    // Update scheduled_at based on routine type and time changes
+    if (r.routine_id && incomingTimeRaw) {
+      // For routine reminders, recalculate scheduled_at when time changes
+      const nowInTz = dayjs().tz(tz);
+      const todayInTz = nowInTz.format('YYYY-MM-DD');
+      const reminderTimeToday = dayjs.tz(`${todayInTz} ${time}`, 'YYYY-MM-DD HH:mm:ss', tz);
+      
+      // If reminder time has already passed today, schedule for tomorrow
+      let targetDate = todayInTz;
+      if (nowInTz.isAfter(reminderTimeToday)) {
+        targetDate = nowInTz.add(1, 'day').format('YYYY-MM-DD');
+      }
+      
+      scheduled_at = this.buildScheduledAt(targetDate, time, tz);
+    } else if ((dto as any).date && time) {
       scheduled_at = this.buildScheduledAt((dto as any).date, time, tz);
+    }
 
     const updated = await this.prisma.reminders.update({
       where: { id: id },
@@ -360,6 +431,15 @@ export class RemindersService {
         updated_at: new Date(),
       },
     });
+
+    // Sync routine's remind_at if this is a routine reminder
+    if (updated.routine_id && scheduled_at) {
+      await this.prisma.routine.update({
+        where: { id: updated.routine_id },
+        data: { remind_at: scheduled_at },
+      }).catch(() => {}); // Non-blocking
+    }
+
     return { success: true, reminder: updated };
   }
 

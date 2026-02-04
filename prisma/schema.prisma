@@ -58,6 +58,7 @@ model User {
   zip_code      String?
   gender        String?
   date_of_birth DateTime? @db.Date
+  timezone      String?   @default("UTC") // IANA timezone (e.g., Asia/Dhaka, America/New_York)
 
   // billing id. e.g. stripe customer id
   billing_id String?

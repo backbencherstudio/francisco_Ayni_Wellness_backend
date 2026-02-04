@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FirebaseStorageService } from '../firebase-storage/firebase-storage.service';
-import { addDays, startOfDay } from 'date-fns';
 import { NotificationService as AppNotificationService } from '../application/notification/notification.service';
 import { stat } from 'fs';
+
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 @Injectable()
 export class AiRoutinesService {
@@ -12,6 +17,19 @@ export class AiRoutinesService {
     private gcs: FirebaseStorageService,
     private appNotification: AppNotificationService,
   ) {}
+
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return user?.timezone || 'UTC';
+  }
+
+  private dayRangeInTz(tz: string) {
+    const start = dayjs().tz(tz).startOf('day');
+    return { start: start.toDate(), end: start.add(1, 'day').toDate() };
+  }
 
   async saveOnboarding(userId: string, preferences: any) {
     const profile = await this.prisma.userRoutineProfile.upsert({
@@ -27,9 +45,8 @@ export class AiRoutinesService {
   }
 
   async generateToday(userId: string, opts?: { moodCheckId?: string }) {
-
-    const today = startOfDay(new Date());
-    const nextDay = addDays(today, 1);
+    const tz = await this.getUserTimezone(userId);
+    const { start: today, end: nextDay } = this.dayRangeInTz(tz);
 
     const existing = await this.prisma.routine.findFirst({
       where: {
@@ -93,14 +110,33 @@ export class AiRoutinesService {
       });
     }
 
-    // Journaling (text-only prompt)
-    items.push({
-      type: 'Journaling',
-      title: 'Journaling: Free Write',
-      description: 'Write freely for 10 minutes about how you feel today.',
-      duration_min: 10,
-      content_type: 'text',
-    });
+    // Journaling (random from 'journaling' folder; fallback to text-only prompt)
+    const journaling = await this.pickRandom('journaling');
+    if (journaling) {
+      const meta = journaling?.customMetadata || {};
+      items.push({
+        type: 'Journaling',
+        title:
+          meta.title ||
+          meta.name ||
+          meta.prompt_title ||
+          'Journaling',
+        description:
+          meta.prompt ||
+          meta.description,
+        gcs_path: journaling.name,
+        content_type: journaling.contentType || 'text',
+        duration_min: this.resolveDurationMinutesFromFile(journaling) ?? 10,
+      });
+    } else {
+      items.push({
+        type: 'Journaling',
+        title: 'Journaling: Free Write',
+        description: 'Write freely for 10 minutes about how you feel today.',
+        duration_min: 10,
+        content_type: 'text',
+      });
+    }
 
     const youtubeVideo = await this.pickRandomYoutubeVideo();
 
@@ -226,7 +262,8 @@ export class AiRoutinesService {
   }
 
   async listToday(userId: string) {
-    const today = startOfDay(new Date());
+    const tz = await this.getUserTimezone(userId);
+    const { start: today } = this.dayRangeInTz(tz);
     const routine = await this.prisma.routine.findUnique({
       where: { user_id_date: { user_id: userId, date: today } },
       include: { items: true },
@@ -249,6 +286,7 @@ export class AiRoutinesService {
     routineId: string,
     withAssets = false,
   ) {
+    const tz = await this.getUserTimezone(userId);
     const routine = await this.prisma.routine.findFirst({
       where: { id: routineId, user_id: userId },
       include: { items: true },
@@ -268,15 +306,15 @@ export class AiRoutinesService {
       select: { id: true, date: true, status: true },
     });
     let streak = 0;
-    let cursor = new Date(day);
+    let cursor = dayjs(day).tz(tz);
     for (const r of prevRoutines) {
-      const d = new Date(r.date);
-      const sameUTCDate =
-        d.toISOString().slice(0, 10) === cursor.toISOString().slice(0, 10);
-      if (sameUTCDate && r.status === 'completed') {
+      const sameDay =
+        dayjs(r.date).tz(tz).format('YYYY-MM-DD') ===
+        cursor.format('YYYY-MM-DD');
+      if (sameDay && r.status === 'completed') {
         streak += 1;
-        cursor.setUTCDate(cursor.getUTCDate() - 1);
-      } else if (sameUTCDate && r.status !== 'completed') {
+        cursor = cursor.subtract(1, 'day');
+      } else if (sameDay && r.status !== 'completed') {
         break;
       }
     }
@@ -374,8 +412,8 @@ export class AiRoutinesService {
     const description = body.description || body.note;
 
     // check today already has mood check
-    const today = startOfDay(new Date());
-    const nextDay = addDays(today, 1);
+    const tz = await this.getUserTimezone(userId);
+    const { start: today, end: nextDay } = this.dayRangeInTz(tz);
 
     const existingMoodCheck = await this.prisma.routineMoodCheck.findFirst({
       where: {
@@ -439,17 +477,40 @@ export class AiRoutinesService {
   }
 
   async submitJournal(userId: string, itemId: string, text: string) {
+    const trimmed = (text || '').trim();
+    if (!trimmed)
+      return { success: false, message: 'Journal text is required' };
     const item = await this.prisma.routineItem.findUnique({
       where: { id: itemId },
       include: { routine: true },
     });
     if (!item || item.routine.user_id !== userId)
       return { success: false, message: 'Not found' };
-    await this.prisma.routineItem.update({
+    if (item.type !== 'Journaling')
+      return { success: false, message: 'Not a journaling item' };
+
+    const now = new Date();
+    const updated = await this.prisma.routineItem.update({
       where: { id: itemId },
-      data: { journal_text: text },
+      data: {
+        journal_text: trimmed,
+        status: 'completed',
+        completed_at: now,
+        updated_at: now,
+      },
     });
-    return this.completeItem(userId, itemId);
+
+    const remaining = await this.prisma.routineItem.count({
+      where: { routine_id: item.routine_id, status: 'pending' },
+    });
+    if (remaining === 0) {
+      await this.prisma.routine.update({
+        where: { id: item.routine_id },
+        data: { status: 'completed', completed_at: now },
+      });
+    }
+
+    return { success: true, item: updated };
   }
 
   async getJournalHistory(userId: string, limit = 20) {
@@ -462,8 +523,24 @@ export class AiRoutinesService {
       },
       orderBy: { completed_at: 'desc' },
       take: limit,
+      include: {
+        routine: {
+          select: { id: true, date: true, status: true, completed_at: true },
+        },
+      },
     });
-    return { success: true, data: items };
+    const itemsWithAssets = await Promise.all(
+      items.map(async (it: any) => {
+        if (it.gcs_path) {
+          const url = await this.gcs
+            .getFileSignedUrl(it.gcs_path)
+            .catch(() => null);
+          return { ...it, signed_url: url?.url || null };
+        }
+        return it;
+      }),
+    );
+    return { success: true, data: itemsWithAssets };
   }
 
   async redoRoutine(
@@ -477,23 +554,22 @@ export class AiRoutinesService {
     });
     if (!source) return { success: false, message: 'Not found' };
 
-    const targetDate = startOfDay(body.today ? new Date() : new Date());
+    const tz = await this.getUserTimezone(userId);
+    const targetDate = dayjs().tz(tz).startOf('day');
     const existingToday = await this.prisma.routine
       .findUnique({
-        where: { user_id_date: { user_id: userId, date: targetDate } },
+        where: { user_id_date: { user_id: userId, date: targetDate.toDate() } },
       })
       .catch(() => null);
     let dateForNew = targetDate;
     if (existingToday && !body.today) {
-      const next = new Date(targetDate);
-      next.setUTCDate(next.getUTCDate() + 1);
-      dateForNew = startOfDay(next);
+      dateForNew = targetDate.add(1, 'day');
     }
 
     const created = await this.prisma.routine.create({
       data: {
         user_id: userId,
-        date: dateForNew,
+        date: dateForNew.toDate(),
         status: 'generated',
         mood_check_id: source.mood_check_id || null,
         profile_snapshot: source.profile_snapshot || undefined,
@@ -513,12 +589,10 @@ export class AiRoutinesService {
     });
 
     if (body.copy_reminder && source.remind_at) {
-      const src = new Date(source.remind_at);
-      const dateStr = dateForNew.toISOString().slice(0, 10);
-      const hh = src.getUTCHours().toString().padStart(2, '0');
-      const mm = src.getUTCMinutes().toString().padStart(2, '0');
-      const iso = `${dateStr}T${hh}:${mm}:00.000Z`;
-      const when = new Date(iso);
+      const src = dayjs(source.remind_at).tz(tz);
+      const hh = src.format('HH');
+      const mm = src.format('mm');
+      const when = dateForNew.set('hour', parseInt(hh, 10)).set('minute', parseInt(mm, 10)).toDate();
       await this.prisma.routine.update({
         where: { id: created.id },
         data: { remind_at: when },
@@ -539,6 +613,7 @@ export class AiRoutinesService {
           scheduled_at: when,
           time: `${hh}:${mm}:00`,
           window: windowGuess,
+          tz: tz,
           active: true,
         },
       });

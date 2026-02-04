@@ -10,4 +10,13 @@ export class GoogleMobileDto {
   @IsNotEmpty()
   idToken: string;
 
+  @ApiProperty({
+    required: false,
+    description: 'IANA timezone string (e.g., America/New_York, Asia/Dhaka)',
+    example: 'UTC',
+  })
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
 }

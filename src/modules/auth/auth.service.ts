@@ -89,7 +89,9 @@ export class AuthService {
           billing_id: true,
           IsSubscriptionActive: true,
           role_users: true,
+          timezone: true,
           // subscriptions: { select: { id: true, status: true, end_date: true } },
+
         },
       });
 
@@ -284,7 +286,7 @@ export class AuthService {
     }
   }
 
-  async login({ email, userId }) {
+  async login({ email, userId, timezone }: { email: string; userId: string; timezone?: string }) {
     try {
       const payload = { email: email, sub: userId };
 
@@ -292,6 +294,14 @@ export class AuthService {
       const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
       const user = await UserRepository.getUserDetails(userId);
+
+      // Update timezone if provided (for app refresh)
+      if (timezone) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { timezone },
+        }).catch(() => {});
+      }
 
       // Best-effort: ensure billing account exists (do not block login)
       await this.ensureStripeCustomerAccount(userId);
@@ -365,12 +375,20 @@ export class AuthService {
   }
 
   // google log in using passport.js
-  async googleLogin({ email, userId }: { email: string; userId: string }) {
+  async googleLogin({ email, userId, timezone }: { email: string; userId: string; timezone?: string }) {
     try {
       const payload = { email: email, sub: userId };
 
       const accessToken = this.jwtService.sign(payload, { expiresIn: '1h' });
       const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+      // Update timezone if provided
+      if (timezone) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { timezone },
+        }).catch(() => {});
+      }
 
       const user = await UserRepository.getUserDetails(userId);
 
@@ -405,10 +423,12 @@ export class AuthService {
     email,
     userId,
     aud,
+    timezone,
   }: {
     email: string;
     userId: string;
     aud: string;
+    timezone?: string;
   }) {
     try {
       const payload = { email, sub: userId, aud };
@@ -417,6 +437,14 @@ export class AuthService {
       const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
 
       const user = await UserRepository.getUserDetails(userId);
+
+      // Update timezone if provided
+      if (timezone) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { timezone },
+        }).catch(() => {});
+      }
 
       await this.redis.set(
         `refresh_token:${user.id}`,
@@ -514,11 +542,13 @@ export class AuthService {
     email,
     password,
     type,
+    timezone,
   }: {
     name: string;
     email: string;
     password: string;
     type?: string;
+    timezone?: string;
     agree_to_terms?: boolean;
   }) {
     try {
@@ -540,6 +570,7 @@ export class AuthService {
         email: email,
         password: password,
         type: type,
+        timezone: timezone,
       });
 
       if (!user || user.success === false) {
@@ -1027,12 +1058,14 @@ export class AuthService {
     firstName?: string | null;
     lastName?: string | null;
     avatar?: string | null;
+    timezone?: string;
   }) {
     const googleId = input.googleId;
     const email = input.email?.toLowerCase?.() ?? undefined;
     const firstName = input.firstName ?? undefined;
     const lastName = input.lastName ?? undefined;
     const avatar = input.avatar ?? undefined;
+    const timezone = input.timezone;
 
     if (!googleId) {
       throw new HttpException('googleId is required', HttpStatus.BAD_REQUEST);
@@ -1112,7 +1145,8 @@ export class AuthService {
     // IMPORTANT: For mobile login, enforce the same geo rules as normal login.
     const loginResponse = await this.login({
       email: user.email,
-      userId: user.id
+      userId: user.id,
+      timezone,
     });
 
     return {
@@ -1135,11 +1169,13 @@ export class AuthService {
     email?: string | null;
     firstName?: string | null;
     lastName?: string | null;
+    timezone?: string;
   }) {
     const appleId = input.appleId;
     const email = input.email?.toLowerCase?.() ?? undefined;
     const firstName = input.firstName ?? undefined;
     const lastName = input.lastName ?? undefined;
+    const timezone = input.timezone;
 
     if (!appleId) {
       throw new HttpException('appleId is required', HttpStatus.BAD_REQUEST);
@@ -1237,6 +1273,7 @@ export class AuthService {
     const loginResponse = await this.login({
       email: user.email,
       userId: user.id,
+      timezone,
     });
 
     return {

@@ -20,6 +20,7 @@ export class GoogleMobileStrategy extends PassportStrategy(
     const body: any = req?.body ?? {};
     const idToken: string | undefined =
       body.idToken ?? body.id_token ?? body.token ?? body.credential;
+    const timezone: string | undefined = body.timezone;
 
     if (!idToken || typeof idToken !== 'string') {
       throw new UnauthorizedException('idToken is required');
@@ -70,6 +71,7 @@ export class GoogleMobileStrategy extends PassportStrategy(
       firstName: (payload as any).given_name,
       lastName: (payload as any).family_name,
       avatar: (payload as any).picture,
+      timezone,
     });
   }
 }

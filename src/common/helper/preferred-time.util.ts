@@ -60,12 +60,12 @@ export function generatePreferredSlots(
   const slots: ReminderSlot[] = [];
   for (let h = win.start; h < win.end; h++) {
     for (let m of [0, 30]) {
-      if (h === win.end && m > 0) continue; 
+      if (h === win.end && m > 0) continue;
       if (h === win.start && m === 0) continue;
       const hour = h.toString().padStart(2, '0');
       const mm = m.toString().padStart(2, '0');
-      const base = `${hour}:${mm}`; 
-      const iso = `${hour}:${mm}:00`; 
+      const base = `${hour}:${mm}`;
+      const iso = `${hour}:${mm}:00`;
       slots.push({ value: base, value_iso: iso, label: formatAmPm(h, m) });
     }
   }
@@ -76,7 +76,7 @@ export function validateReminderAgainstPreferred(
   reminder: string,
   pref?: $Enums.PreferredTime,
 ) {
-  if (!pref) return; 
+  if (!pref) return;
   const win = PREF_WINDOWS[pref];
   if (!win) return;
   let timePart = (reminder || '').trim();
@@ -105,14 +105,18 @@ export function validateReminderAgainstPreferred(
 
 export function getReminderSlots(preferredRaw: string) {
   const pref = normalizePreferred(preferredRaw);
+
   if (!pref) throw new BadRequestException('Invalid preferred time');
+
   const slots = generatePreferredSlots(pref);
+
   const uiLabelMap: Record<$Enums.PreferredTime, string> = {
     Morning: 'Morning (6-10 AM)',
     Afternoon: 'Afternoon (12-4 PM)',
     Evening: 'Evening (6-9 PM)',
     Night: 'Night (9-11 PM)',
   } as const;
+  
   return {
     success: true,
     preferred_time: pref,
