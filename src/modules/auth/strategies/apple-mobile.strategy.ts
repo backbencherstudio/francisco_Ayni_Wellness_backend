@@ -22,6 +22,7 @@ export class AppleMobileStrategy extends PassportStrategy(
     const body: any = req?.body ?? {};
     const identityToken: string | undefined =
       body.identityToken ?? body.identity_token ?? body.idToken;
+    const timezone: string | undefined = body.timezone;
 
     if (!identityToken || typeof identityToken !== 'string') {
       throw new UnauthorizedException('identityToken is required');
@@ -61,6 +62,7 @@ export class AppleMobileStrategy extends PassportStrategy(
       email: emailFromToken ?? emailFromBody,
       firstName: typeof body.firstName === 'string' ? body.firstName : undefined,
       lastName: typeof body.lastName === 'string' ? body.lastName : undefined,
+      timezone,
     });
   }
 }

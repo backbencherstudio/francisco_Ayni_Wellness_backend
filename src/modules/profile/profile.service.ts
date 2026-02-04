@@ -3,8 +3,13 @@ import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StatsService } from '../stats/stats.service';
-import { startOfDay, subDays } from 'date-fns';
 import { RoutineStatus } from '@prisma/client';
+
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 @Injectable()
 export class ProfileService {
@@ -12,6 +17,20 @@ export class ProfileService {
     private readonly prisma: PrismaService,
     private readonly statsService: StatsService,
   ) {}
+
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return user?.timezone || 'UTC';
+  }
+
+  private dayRangeInTz(tz: string) {
+    const start = dayjs().tz(tz).startOf('day').toDate();
+    const end = dayjs().tz(tz).endOf('day').toDate();
+    return { start, end };
+  }
 
   async getMe(user_id: any) {
     try {
@@ -71,6 +90,8 @@ export class ProfileService {
   // Profile overview metrics for dashboard
   async overview(userId: string) {
     if (!userId) return { success: false, message: 'User required' };
+    
+    const tz = await this.getUserTimezone(userId);
 
     // Fetch basic user
     const user = await this.prisma.user.findUnique({
@@ -100,21 +121,21 @@ export class ProfileService {
     const habitsCompletedCount = habitLogs.length;
 
     const habitActiveDaySet = new Set(
-      habitLogs.map((l) => startOfDay(new Date(l.day)).toISOString()),
+      habitLogs.map((l) => dayjs(l.day).tz(tz).startOf('day').format('YYYY-MM-DD')),
     );
     const daysActive = habitActiveDaySet.size;
 
     // Current habit streak: consecutive days ending today with at least one habit log
     let habitStreak = 0;
     {
-      const todayCursor = startOfDay(new Date());
+      let todayCursor = dayjs().tz(tz).startOf('day');
       const habitDayIsoSet = new Set(habitActiveDaySet);
 
       for (;;) {
-        const key = startOfDay(new Date(todayCursor)).toISOString();
+        const key = todayCursor.format('YYYY-MM-DD');
         if (habitDayIsoSet.has(key)) {
           habitStreak++;
-          todayCursor.setDate(todayCursor.getDate() - 1);
+          todayCursor = todayCursor.subtract(1, 'day');
         } else break;
       }
     }
@@ -135,9 +156,9 @@ export class ProfileService {
     }
 
     // ---------- AI Routines block ----------
-    const day0 = startOfDay(new Date());
-    const weekStart = startOfDay(subDays(day0, 6));
-    const monthStart = startOfDay(subDays(day0, 29));
+    const { start: day0 } = this.dayRangeInTz(tz);
+    const weekStart = dayjs(day0).tz(tz).subtract(6, 'days').startOf('day').toDate();
+    const monthStart = dayjs(day0).tz(tz).subtract(29, 'days').startOf('day').toDate();
 
     // Last 30 days routines and items
     const routinesLast30 = await this.prisma.routine.findMany({
@@ -189,10 +210,10 @@ export class ProfileService {
     const completedRoutineDates = new Set(
       routinesLast30
         .filter((r) => r.status === 'completed' || r.completed_at)
-        .map((r) => startOfDay(new Date(r.date)).getTime()),
+        .map((r) => dayjs(r.date).tz(tz).startOf('day').valueOf()),
     );
     let routineStreak = 0;
-    let cursor = startOfDay(new Date()).getTime();
+    let cursor = dayjs().tz(tz).startOf('day').valueOf();
     const dayMs = 86400000;
     for (let i = 0; i < 60; i++) {
       if (completedRoutineDates.has(cursor)) {
@@ -214,10 +235,10 @@ export class ProfileService {
       select: { date: true },
     });
     const habitDayMsSet = new Set(
-      habitLogs.map((l) => startOfDay(new Date(l.day)).getTime()),
+      habitLogs.map((l) => dayjs(l.day).tz(tz).startOf('day').valueOf()),
     );
     const routineDayMsSet = new Set(
-      completedRoutinesAll.map((r) => startOfDay(new Date(r.date)).getTime()),
+      completedRoutinesAll.map((r) => dayjs(r.date).tz(tz).startOf('day').valueOf()),
     );
     const combinedDayMsArray: number[] = [
       ...(Array.from(habitDayMsSet.values()) as number[]),
@@ -228,7 +249,7 @@ export class ProfileService {
     // Combined streak: consecutive days with either habit log or completed routine
     let combinedStreak = 0;
     {
-      let cursor2 = startOfDay(new Date()).getTime();
+      let cursor2 = dayjs().tz(tz).startOf('day').valueOf();
       for (let i = 0; i < 400; i++) {
         if (combinedDayMsSet.has(cursor2)) {
           combinedStreak++;

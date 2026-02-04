@@ -26,4 +26,13 @@ export class AppleMobileDto {
   @IsString()
   lastName?: string;
 
+  @ApiProperty({
+    required: false,
+    description: 'IANA timezone string (e.g., America/New_York, Asia/Dhaka)',
+    example: 'UTC',
+  })
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
 }

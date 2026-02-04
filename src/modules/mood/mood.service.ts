@@ -11,16 +11,30 @@ import {
   EMOTION_CONFIG_VERSION,
 } from './emotion.config';
 import { UpdateMoodDto } from './dto/update-mood.dto';
-import {
-  addDays,
-  differenceInCalendarDays,
-  startOfDay,
-  subDays,
-} from 'date-fns';
+
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 @Injectable()
 export class MoodService {
   constructor(private prisma: PrismaService) {}
+
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return user?.timezone || 'UTC';
+  }
+
+  private dayRangeInTz(tz: string) {
+    const start = dayjs().tz(tz).startOf('day').toDate();
+    const end = dayjs().tz(tz).endOf('day').toDate();
+    return { start, end };
+  }
 
   private normalizeEmotion(e: string) {
     return e.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -121,7 +135,8 @@ export class MoodService {
   }
 
   async getToday(userId: string) {
-    const start = startOfDay(new Date());
+    const tz = await this.getUserTimezone(userId);
+    const { start } = this.dayRangeInTz(tz);
     const prismaAny: any = this.prisma as any;
     return prismaAny.moodEntry.findFirst({
       where: { user_id: userId, created_at: { gte: start }, deleted_at: null },
@@ -140,7 +155,9 @@ export class MoodService {
   }
 
   async getTrend(userId: string, days = 7) {
-    const from = startOfDay(subDays(new Date(), days - 1));
+    const tz = await this.getUserTimezone(userId);
+    const { start: today } = this.dayRangeInTz(tz);
+    const from = dayjs(today).tz(tz).subtract(days - 1, 'days').toDate();
     const prismaAny: any = this.prisma as any;
     const aggregates = await prismaAny.moodDailyAggregate.findMany({
       where: { user_id: userId, date: { gte: from } },
@@ -175,10 +192,11 @@ export class MoodService {
 
   async insights(userId: string, days = 7) {
     const prismaAny: any = this.prisma as any;
-    const todayStart = startOfDay(new Date());
-    const startRange = new Date(todayStart.getTime() - (days - 1) * 86400000);
+    const tz = await this.getUserTimezone(userId);
+    const { start: todayStart } = this.dayRangeInTz(tz);
+    const startRange = dayjs(todayStart).tz(tz).subtract(days - 1, 'days').toDate();
     // Fetch up to 2 * days aggregates to compute delta vs previous period
-    const rangeStartForDelta = new Date(startRange.getTime() - days * 86400000);
+    const rangeStartForDelta = dayjs(startRange).tz(tz).subtract(days, 'days').toDate();
     const aggs = await prismaAny.moodDailyAggregate.findMany({
       where: { user_id: userId, date: { gte: rangeStartForDelta } },
       orderBy: { date: 'asc' },
@@ -237,12 +255,10 @@ export class MoodService {
     // Streak (consecutive days with at least one entry ending today or yesterday)
     let streak = 0;
     const dayMap = new Set(
-      recent.map((a) => startOfDay(new Date(a.date)).getTime()),
+      recent.map((a) => dayjs(a.date).tz(tz).startOf('day').valueOf()),
     );
     for (let i = 0; i < days; i++) {
-      const t = startOfDay(
-        new Date(todayStart.getTime() - i * 86400000),
-      ).getTime();
+      const t = dayjs(todayStart).tz(tz).subtract(i, 'days').startOf('day').valueOf();
       if (dayMap.has(t)) streak++;
       else break;
     }
@@ -370,13 +386,14 @@ export class MoodService {
     return { success: true };
   }
 
-  private dayKey(date: Date) {
-    return startOfDay(date);
+  private dayKey(date: Date, tz: string = 'UTC') {
+    return dayjs(date).tz(tz).startOf('day').toDate();
   }
 
   private async recomputeDailyAggregate(userId: string, date: Date) {
-    const day = this.dayKey(date);
-    const nextDay = addDays(day, 1);
+    const tz = await this.getUserTimezone(userId);
+    const day = this.dayKey(date, tz);
+    const nextDay = dayjs(day).tz(tz).add(1, 'day').toDate();
     const prismaAny: any = this.prisma as any;
     const entries = await prismaAny.moodEntry.findMany({
       where: {

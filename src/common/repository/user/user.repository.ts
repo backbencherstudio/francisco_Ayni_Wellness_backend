@@ -198,7 +198,7 @@ export class UserRepository {
     phone_number,
     role_id = null,
     type = 'user',
-    
+    timezone,
   }: {
     name?: string;
     email: string;
@@ -206,6 +206,7 @@ export class UserRepository {
     phone_number?: string;
     role_id?: string;
     type?: string;
+    timezone?: string;
   }) {
     try {
       const data = {};
@@ -214,6 +215,9 @@ export class UserRepository {
       }
       if (phone_number) {
         data['phone_number'] = phone_number;
+      }
+      if (timezone) {
+        data['timezone'] = timezone;
       }
       if (email) {
         // Check if email already exist

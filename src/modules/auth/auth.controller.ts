@@ -63,6 +63,7 @@ export class AuthController {
       const email = data.email;
       const password = data.password;
       const type = data.type;
+      const timezone = data.timezone;
 
       if (!name) {
         throw new HttpException('Name not provided', HttpStatus.UNAUTHORIZED);
@@ -84,6 +85,7 @@ export class AuthController {
         email: email,
         password: password,
         type: type,
+        timezone: timezone,
       });
 
       return response;
@@ -99,7 +101,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Login user' })
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  async login(@Req() req: Request, @Res() res: Response) {
+  async login(@Req() req: Request, @Res() res: Response, @Body() body: { timezone?: string }) {
     try {
       // console.log("user", req.user);
       const user_id = req.user.id;
@@ -109,6 +111,7 @@ export class AuthController {
       const response = await this.authService.login({
         userId: user_id,
         email: user_email,
+        timezone: body.timezone,
       });
 
       res.cookie('refresh_token', response.authorization.refresh_token, {

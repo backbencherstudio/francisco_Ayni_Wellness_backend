@@ -8,13 +8,33 @@ import { UpdateHabitDto } from './dto/update-habit.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { HabitCategory, $Enums } from '@prisma/client';
 import { CompleteHabitDto } from './dto/complete-habit.dto';
-import { startOfDay, subDays, getDay } from 'date-fns';
+import { getDay } from 'date-fns';
+
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 @Injectable()
 export class HabitService {
   constructor(private prisma: PrismaService) {}
 
-  // --- Helpers -----------------------------------------------------------
+  // --- Helpers ---
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return user?.timezone || 'UTC';
+  }
+
+  private dayRangeInTz(tz: string) {
+    const start = dayjs().tz(tz).startOf('day').toDate();
+    const end = dayjs().tz(tz).endOf('day').toDate();
+    return { start, end };
+  }
+
   private dayBucket(date: Date) {
     return new Date(
       Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
@@ -113,7 +133,8 @@ export class HabitService {
     });
     if (!habit) throw new NotFoundException('Habit not found');
 
-    const today = this.dayBucket(new Date());
+    const tz = await this.getUserTimezone(userId);
+    const today = dayjs().tz(tz).startOf('day').toDate();
 
     if (dto?.undo) {
       try {
@@ -176,13 +197,15 @@ export class HabitService {
       return { success: true, habit_id: habitId, days: 0, logs };
     }
 
-    const from = subDays(new Date(), (days as number) - 1); 
+    const tz = await this.getUserTimezone(userId);
+    const { start: today } = this.dayRangeInTz(tz);
+    const from = dayjs(today).tz(tz).subtract(days - 1, 'days').toDate();
 
     const logs = await prismaAny.habitLog.findMany({
       where: {
         user_id: userId,
         habit_id: habitId,
-        day: { gte: this.dayBucket(from) },
+        day: { gte: from },
       },
       orderBy: { day: 'asc' },
     });
@@ -293,7 +316,8 @@ export class HabitService {
 
   async getTodayHabits(userId: string) {
     if (!userId) throw new BadRequestException('User required');
-    const today = this.dayBucket(new Date());
+    const tz = await this.getUserTimezone(userId);
+    const { start: today } = this.dayRangeInTz(tz);
     console.log('today date:', today);
 
     const habits = await this.prisma.habit.findMany({
