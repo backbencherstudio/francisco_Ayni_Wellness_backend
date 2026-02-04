@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { startOfDay, getDay, addDays } from 'date-fns';
+import { getDay } from 'date-fns';
+
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+const timezone = require('dayjs/plugin/timezone');
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface HomeDashboardResponse {
   success: boolean;
@@ -33,13 +39,20 @@ interface HomeDashboardResponse {
 export class HomeService {
   constructor(private prisma: PrismaService) {}
 
+  private async getUserTimezone(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { timezone: true },
+    });
+    return user?.timezone || 'UTC';
+  }
+
   async today(userId: string): Promise<HomeDashboardResponse> {
     const prismaAny: any = this.prisma as any;
 
-    const dayStart = startOfDay(new Date());
-    const nextDay = addDays(dayStart, 1);
-
-    console.log('date', dayStart, nextDay);
+    const tz = await this.getUserTimezone(userId);
+    const dayStart = dayjs().tz(tz).startOf('day');
+    const nextDay = dayStart.add(1, 'day');
 
     const [user, habits, logs, routine, todayMood] = await Promise.all([
       prismaAny.user.findFirst({ where: { id: userId } }),
@@ -49,18 +62,21 @@ export class HomeService {
       }),
 
       prismaAny.habitLog.findMany({
-        where: { user_id: userId, day: dayStart },
+        where: { user_id: userId, day: dayStart.toDate() },
       }),
 
       prismaAny.routine.findFirst({
-        where: { user_id: userId, date: { gte: dayStart, lt: nextDay } },
+        where: {
+          user_id: userId,
+          date: { gte: dayStart.toDate(), lt: nextDay.toDate() },
+        },
         include: { items: true, mood_check: true },
       }),
 
       prismaAny.moodEntry.findFirst({
         where: {
           user_id: userId,
-          created_at: { gte: dayStart, lt: nextDay },
+          created_at: { gte: dayStart.toDate(), lt: nextDay.toDate() },
           deleted_at: null,
         },
         orderBy: { created_at: 'desc' },
@@ -89,7 +105,9 @@ export class HomeService {
       }
     };
 
-    const dueHabits = habits.filter((h: any) => isDueToday(h.frequency));
+    const dueHabits = habits.filter((h: any) =>
+      isDueToday(h.frequency, dayStart.toDate()),
+    );
     const totalHabits = dueHabits.length;
     const dueIds = dueHabits.map((h: any) => h.id);
     const habitCompleted = logs.filter((l: any) =>
@@ -137,7 +155,26 @@ export class HomeService {
           ? todayMood.score
           : null;
 
-    const greeting = this.buildGreeting();
+    if (!user) {
+      return {
+        success: false,
+        date: dayStart.toISOString(),
+        greeting: this.buildGreeting(tz),
+        user: {
+          id: null,
+          name: null,
+          first_name: null,
+          last_name: null,
+          avatar: null,
+        },
+        routines: { total: 0, completed: 0, remaining: 0, percent: 0 },
+        meditation_minutes: 0,
+        mood: { score: null, entry_id: null },
+        meta: { generated_at: new Date().toISOString() },
+      };
+    }
+
+    const greeting = this.buildGreeting(tz);
 
     return {
       success: true,
@@ -157,8 +194,8 @@ export class HomeService {
     };
   }
 
-  private buildGreeting() {
-    const hour = new Date().getHours();
+  private buildGreeting(tz: string) {
+    const hour = dayjs().tz(tz).hour();
     let partOfDay = 'Day';
     if (hour < 5) partOfDay = 'Night';
     else if (hour < 12) partOfDay = 'Morning';
