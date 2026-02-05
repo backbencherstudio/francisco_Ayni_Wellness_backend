@@ -937,12 +937,14 @@ model Routine {
   completed_at     DateTime?
   notes            String?
   profile_snapshot Json? // snapshot of preferences used for generation
+  redo_source_id   String?
 
   items     RoutineItem[]
   Reminders Reminders[]
 
   @@unique([user_id, date])
   @@index([user_id, date])
+  @@index([user_id, redo_source_id])
   @@map("routines")
 }
 
