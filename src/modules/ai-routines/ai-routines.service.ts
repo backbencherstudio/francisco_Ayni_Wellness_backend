@@ -51,6 +51,7 @@ export class AiRoutinesService {
     const existing = await this.prisma.routine.findFirst({
       where: {
         user_id: userId,
+        redo_source_id: null,
         date: {
           gte: today,
           lt: nextDay,
@@ -116,14 +117,8 @@ export class AiRoutinesService {
       const meta = journaling?.customMetadata || {};
       items.push({
         type: 'Journaling',
-        title:
-          meta.title ||
-          meta.name ||
-          meta.prompt_title ||
-          'Journaling',
-        description:
-          meta.prompt ||
-          meta.description,
+        title: meta.title || meta.name || meta.prompt_title || 'Journaling',
+        description: meta.prompt || meta.description,
         gcs_path: journaling.name,
         content_type: journaling.contentType || 'text',
         duration_min: this.resolveDurationMinutesFromFile(journaling) ?? 10,
@@ -263,12 +258,16 @@ export class AiRoutinesService {
 
   async listToday(userId: string) {
     const tz = await this.getUserTimezone(userId);
-    const { start: today } = this.dayRangeInTz(tz);
-    const routine = await this.prisma.routine.findUnique({
-      where: { user_id_date: { user_id: userId, date: today } },
+    const { start: today, end: nextDay } = this.dayRangeInTz(tz);
+    const routines = await this.prisma.routine.findMany({
+      where: {
+        user_id: userId,
+        date: { gte: today, lt: nextDay },
+      },
       include: { items: true },
+      orderBy: { date: 'desc' },
     });
-    return { success: true, routine };
+    return { success: true, routines };
   }
 
   async listHistory(userId: string, limit = 30) {
@@ -422,7 +421,17 @@ export class AiRoutinesService {
       },
     });
     if (existingMoodCheck) {
-      return { success: false, message: 'Mood check already submitted today' };
+      const existingDailyRoutine = await this.prisma.routine.findFirst({
+        where: {
+          user_id: userId,
+          redo_source_id: null,
+          date: { gte: today, lt: nextDay },
+        },
+      });
+      if (existingDailyRoutine) {
+        return { success: false, message: 'Mood check already submitted today' };
+      }
+      return this.generateToday(userId, { moodCheckId: existingMoodCheck.id });
     }
 
     const check = await this.prisma.routineMoodCheck.create({
@@ -439,10 +448,12 @@ export class AiRoutinesService {
 
   async listTodayWithSignedAssets(userId: string) {
     const res = await this.listToday(userId);
-    const routine = res.routine;
-    if (!routine) return res;
-    const items = await Promise.all(
-      routine.items.map(async (it: any) => {
+    const routines = (res as any).routines || [];
+    if (!routines.length) return res;
+    const routinesWithAssets = await Promise.all(
+      routines.map(async (routine: any) => {
+        const items = await Promise.all(
+          routine.items.map(async (it: any) => {
         // Handle YouTube items
         if (
           it.content_type === 'video/youtube' &&
@@ -470,10 +481,13 @@ export class AiRoutinesService {
             url_source: url?.source || null,
           };
         }
-        return it;
+            return it;
+          }),
+        );
+        return { ...routine, items };
       }),
     );
-    return { success: true, routine: { ...routine, items } };
+    return { success: true, routines: routinesWithAssets };
   }
 
   async submitJournal(userId: string, itemId: string, text: string) {
@@ -556,15 +570,31 @@ export class AiRoutinesService {
 
     const tz = await this.getUserTimezone(userId);
     const targetDate = dayjs().tz(tz).startOf('day');
-    const existingToday = await this.prisma.routine
-      .findUnique({
-        where: { user_id_date: { user_id: userId, date: targetDate.toDate() } },
-      })
-      .catch(() => null);
-    let dateForNew = targetDate;
-    if (existingToday && !body.today) {
-      dateForNew = targetDate.add(1, 'day');
+    const baseDay = body.today === false ? targetDate.add(1, 'day') : targetDate;
+    const dayStart = baseDay.startOf('day');
+    const dayEnd = dayStart.add(1, 'day');
+
+    const existingRedoForSource = await this.prisma.routine.findFirst({
+      where: {
+        user_id: userId,
+        redo_source_id: source.id,
+        date: { gte: dayStart.toDate(), lt: dayEnd.toDate() },
+      },
+    });
+
+    if (existingRedoForSource) {
+      return {
+        success: false,
+        message: 'This routine already has a redo for that day.',
+      };
     }
+
+    const nowInTz = dayjs().tz(tz);
+    const dateForNew = dayStart
+      .hour(nowInTz.hour())
+      .minute(nowInTz.minute())
+      .second(nowInTz.second())
+      .millisecond(nowInTz.millisecond());
 
     const created = await this.prisma.routine.create({
       data: {
@@ -573,6 +603,7 @@ export class AiRoutinesService {
         status: 'generated',
         mood_check_id: source.mood_check_id || null,
         profile_snapshot: source.profile_snapshot || undefined,
+        redo_source_id: source.id,
         items: {
           create: source.items.map((it) => ({
             type: it.type as any,
@@ -592,7 +623,10 @@ export class AiRoutinesService {
       const src = dayjs(source.remind_at).tz(tz);
       const hh = src.format('HH');
       const mm = src.format('mm');
-      const when = dateForNew.set('hour', parseInt(hh, 10)).set('minute', parseInt(mm, 10)).toDate();
+      const when = dateForNew
+        .set('hour', parseInt(hh, 10))
+        .set('minute', parseInt(mm, 10))
+        .toDate();
       await this.prisma.routine.update({
         where: { id: created.id },
         data: { remind_at: when },
