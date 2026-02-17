@@ -39,12 +39,39 @@ interface HomeDashboardResponse {
 export class HomeService {
   constructor(private prisma: PrismaService) {}
 
+  private normalizeTimezone(raw?: string | null): string {
+    if (!raw) return 'UTC';
+    const trimmed = String(raw).trim();
+
+    // Handle simple numeric offsets like +06 or -04
+    const offsetMatch = trimmed.match(/^([+-])(\d{2})(?::?(\d{2}))?$/);
+    if (offsetMatch) {
+      const sign = offsetMatch[1];
+      const hours = offsetMatch[2];
+      const minutes = offsetMatch[3] || '00';
+      // Etc/GMT does not support half-hour offsets reliably
+      if (minutes !== '00') return 'UTC';
+      // Note: Etc/GMT sign is inverted
+      const etcSign = sign === '+' ? '-' : '+';
+      const etcTz = `Etc/GMT${etcSign}${parseInt(hours, 10)}`;
+      return etcTz;
+    }
+
+    return trimmed;
+  }
+
   private async getUserTimezone(userId: string): Promise<string> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { timezone: true },
     });
-    return user?.timezone || 'UTC';
+    const tz = this.normalizeTimezone(user?.timezone || 'UTC');
+    try {
+      dayjs().tz(tz);
+      return tz;
+    } catch {
+      return 'UTC';
+    }
   }
 
   async today(userId: string): Promise<HomeDashboardResponse> {
