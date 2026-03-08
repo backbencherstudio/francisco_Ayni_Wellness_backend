@@ -7,6 +7,7 @@ import appConfig from '../../config/app.config';
 import { SubscriptionPlan } from '@prisma/client';
 import { CreateProductAndPriceDto } from './dto/createProductAndPrice.dto';
 import { AddCardDto } from './dto/AddCardDto.dto';
+import { UpsertIapPlanDto } from './dto/upsert-iap-plan.dto';
 
 // ===== Subscription Status Enum =====
 enum SubscriptionStatus {
@@ -485,6 +486,137 @@ export class SubscriptionService {
       };
     } catch (error) {
       this.logger.error(`Error retrieving plans: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async getMobilePlans(platform: string = 'all') {
+    try {
+      const normalizedPlatform = ['ios', 'android', 'all'].includes(platform)
+        ? platform
+        : 'all';
+
+      const plans = await this.prisma.subsPlan.findMany({
+        where: {
+          isActive: true,
+        },
+        orderBy: [{ displayOrder: 'asc' }, { price: 'asc' }],
+      });
+
+      const mappedPlans = plans
+        .map((plan) => {
+          const supportsIos = !!plan.appleProductId;
+          const supportsAndroid = !!plan.googleProductId;
+
+          if (normalizedPlatform === 'ios' && !supportsIos) return null;
+          if (normalizedPlatform === 'android' && !supportsAndroid) return null;
+
+          return {
+            id: plan.id,
+            name: plan.name,
+            slug: plan.slug,
+            description: plan.description,
+            price_description: plan.price_description,
+            type: plan.type,
+            isFree: plan.isFree,
+            isActive: plan.isActive,
+            displayOrder: plan.displayOrder,
+            trialDays: plan.trialDays,
+            pricing: {
+              price: plan.price,
+              currency: plan.currency,
+              interval: plan.interval,
+              intervalCount: plan.intervalCount,
+            },
+            store_mapping: {
+              apple: {
+                productId: plan.appleProductId,
+              },
+              google: {
+                productId: plan.googleProductId,
+                basePlanId: plan.googleBasePlanId,
+                offerId: plan.googleOfferId,
+              },
+            },
+            supported_platforms: {
+              ios: supportsIos,
+              android: supportsAndroid,
+            },
+          };
+        })
+        .filter(Boolean);
+
+      return {
+        success: true,
+        statusCode: 200,
+        platform: normalizedPlatform,
+        data: mappedPlans,
+      };
+    } catch (error) {
+      this.logger.error(`Error retrieving mobile plans: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async upsertIapPlan(dto: UpsertIapPlanDto) {
+    try {
+      const data: any = {
+        name: dto.name,
+        slug: dto.slug,
+        description: dto.description,
+        price_description: dto.price_description,
+        price: dto.price,
+        currency: dto.currency,
+        interval: dto.interval,
+        intervalCount: dto.intervalCount,
+        trialDays: dto.trialDays,
+        type: dto.type || SubscriptionPlan.BASIC,
+        isFree: dto.isFree ?? false,
+        isActive: dto.isActive ?? true,
+        displayOrder: dto.displayOrder ?? 0,
+        appleProductId: dto.appleProductId,
+        googleProductId: dto.googleProductId,
+        googleBasePlanId: dto.googleBasePlanId,
+        googleOfferId: dto.googleOfferId,
+      };
+
+      const normalizedAppleId = dto.appleProductId?.trim?.();
+      if (normalizedAppleId) {
+        const conflictApple = await this.prisma.subsPlan.findFirst({
+          where: {
+            appleProductId: normalizedAppleId,
+            ...(dto.id ? { NOT: { id: dto.id } } : {}),
+          },
+          select: { id: true },
+        });
+        if (conflictApple) {
+          throw new BadRequestException(
+            `Apple product '${normalizedAppleId}' is already mapped to another plan`,
+          );
+        }
+      }
+
+      const plan = dto.id
+        ? await this.prisma.subsPlan.update({
+            where: { id: dto.id },
+            data,
+          })
+        : await this.prisma.subsPlan.create({
+            data,
+          });
+
+      this.logger.log(`IAP plan upserted: ${plan.id}`);
+
+      return {
+        success: true,
+        statusCode: 200,
+        message: dto.id
+          ? 'IAP mapping plan updated successfully'
+          : 'IAP mapping plan created successfully',
+        data: plan,
+      };
+    } catch (error) {
+      this.logger.error(`Error upserting IAP plan: ${error.message}`);
       throw error;
     }
   }

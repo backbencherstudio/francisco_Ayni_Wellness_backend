@@ -6,6 +6,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CreateProductAndPriceDto } from './dto/createProductAndPrice.dto';
 import { AddCardDto } from './dto/AddCardDto.dto';
 import { GetUser } from '../auth/decorators/get-user.decorator';
+import { UpsertIapPlanDto } from './dto/upsert-iap-plan.dto';
 
 @ApiTags('subscription')
 @Controller('subscription')
@@ -42,6 +43,22 @@ export class SubscriptionController {
   @Get('plans')
   getAllPlans(): Promise<any> {
     return this.subscriptionService.getAllPlans();
+  }
+
+  @ApiOperation({ summary: 'Get mobile IAP plans (platform-aware)' })
+  @Get('plans/mobile')
+  getMobilePlans(@Req() req: any): Promise<any> {
+    const platform =
+      typeof req?.query?.platform === 'string'
+        ? req.query.platform.toLowerCase()
+        : 'all';
+    return this.subscriptionService.getMobilePlans(platform);
+  }
+
+  @ApiOperation({ summary: 'Create or update IAP mapping plan for Apple/Google' })
+  @Post('plans/upsert-iap')
+  upsertIapPlan(@Body() dto: UpsertIapPlanDto): Promise<any> {
+    return this.subscriptionService.upsertIapPlan(dto);
   }
 
   @ApiOperation({ summary: 'Cancel Subscription' })

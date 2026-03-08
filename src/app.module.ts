@@ -34,6 +34,7 @@ import { FirebaseStorageModule } from './modules/firebase-storage/firebase-stora
 import { HomeModule } from './modules/home/home.module';
 import { AiRoutinesModule } from './modules/ai-routines/ai-routines.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
+import { IapModule } from './modules/iap/iap.module';
 import { HttpResponseInterceptor } from './common/interceptor/http-response.interceptor';
 
 
@@ -79,6 +80,7 @@ import { HttpResponseInterceptor } from './common/interceptor/http-response.inte
     HomeModule,
     AiRoutinesModule,
     RemindersModule,
+    IapModule,
   ],
   controllers: [AppController],
   providers: [
