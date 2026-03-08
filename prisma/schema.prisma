@@ -108,6 +108,7 @@ model User {
 
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
   subscriptionId String?
+  storeEventLogs StoreEventLog[]
 
   @@map("users")
 }
@@ -291,6 +292,8 @@ model SubsPlan {
   slug              String  @unique // free, premium_monthly, premium_yearly
   description       String?
   price_description String?
+  displayOrder      Int     @default(0)
+  isActive          Boolean @default(true)
 
   // Billing details
   isFree        Boolean   @default(false)
@@ -303,6 +306,12 @@ model SubsPlan {
   stripeProductId String?
   stripePriceId   String?
 
+  // App Store / Play Store mapping
+  appleProductId  String? @unique
+  googleProductId String?
+  googleBasePlanId String?
+  googleOfferId   String?
+
   // Trial (for free plan)
   trialDays Int?
   type      SubscriptionPlan @default(FREE)
@@ -311,6 +320,9 @@ model SubsPlan {
   updatedAt DateTime @updatedAt
 
   subscriptions Subscription[]
+
+  @@index([isActive, displayOrder])
+  @@index([googleProductId, googleBasePlanId, googleOfferId])
 }
 
 model PaymentMethod {
@@ -356,6 +368,23 @@ model Subscription {
   // Stripe subscription
   stripeSubId String?
 
+  // Billing provider metadata (Phase 1 IAP foundation)
+  provider               BillingProvider  @default(NONE)
+  storeProductId         String?
+  storeBasePlanId        String?
+  storeOfferId           String?
+  externalSubscriptionId String?
+  purchaseToken          String?          @unique
+  originalTransactionId  String?          @unique
+  environment            StoreEnvironment @default(UNKNOWN)
+  latestReceiptPayloadHash String?
+  gracePeriodEndsAt      DateTime?
+  pausedAt               DateTime?
+  revokedAt              DateTime?
+  lastEventAt            DateTime?
+  lastEventType          String?
+  lastEventId            String?
+
   // Auto-renew
   isActive          Boolean @default(true)
   cancelAtPeriodEnd Boolean @default(false)
@@ -364,8 +393,40 @@ model Subscription {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   users     User[]
+  storeEvents StoreEventLog[]
+
+  @@index([provider, externalSubscriptionId])
+  @@index([provider, purchaseToken])
+  @@index([provider, originalTransactionId])
 
   @@map("subscriptions")
+}
+
+model StoreEventLog {
+  id                     String           @id @default(cuid())
+  provider               BillingProvider
+  eventId                String
+  eventType              String?
+  environment            StoreEnvironment @default(UNKNOWN)
+  externalSubscriptionId String?
+
+  userId       String?
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  subscriptionId String?
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  payload    Json?
+  status     String?   @default("received")
+  error      String?
+  processedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([provider, eventId])
+  @@index([provider, externalSubscriptionId])
+  @@index([subscriptionId])
+  @@index([userId])
+  @@map("store_event_logs")
 }
 
 enum SubscriptionPlan {
@@ -373,6 +434,19 @@ enum SubscriptionPlan {
   TRIALING
   BASIC
   PREMIUM
+}
+
+enum BillingProvider {
+  NONE
+  STRIPE
+  APPLE
+  GOOGLE
+}
+
+enum StoreEnvironment {
+  UNKNOWN
+  SANDBOX
+  PRODUCTION
 }
 
 // model UserPaymentMethod {
