@@ -55,6 +55,12 @@ APPLE_CLIENT_ID=<optional_fallback_same_as_bundle_id>
 APPLE_ISSUER_ID=<app_store_connect_issuer_id>
 APPLE_KEY_ID=<app_store_connect_api_key_id>
 APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+APPLE_APP_ID=<optional_app_store_connect_app_id>
+
+# Apple catalog sync (auto-update subs_plans from App Store Connect)
+IAP_APPLE_CATALOG_SYNC_ENABLED=1
+IAP_APPLE_CATALOG_SYNC_RUN_ON_STARTUP=1
+IAP_APPLE_CATALOG_SYNC_DEACTIVATE_MISSING=0
 
 # Google verification
 GOOGLE_PLAY_PACKAGE_NAME=<your_android_package_name>
@@ -68,6 +74,27 @@ node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
 ## 3. Endpoints and JSON Contracts
+
+## 3.A Apple Catalog Auto Sync (No Admin Dependency)
+
+When enabled, backend syncs subscription products from App Store Connect into `subs_plans` automatically.
+
+- Scheduler: every 6 hours.
+- Startup behavior: one sync run on app boot when `IAP_APPLE_CATALOG_SYNC_RUN_ON_STARTUP=1`.
+- Source API: App Store Connect API (`/v1/apps`, `/v1/apps/{id}/inAppPurchasesV2`).
+
+### Sync behavior
+
+1. Reads Apple app (`APPLE_APP_ID` or bundle-id lookup via `APPLE_BUNDLE_ID`).
+2. Pulls App Store IAP catalog and filters subscription products.
+3. Upserts local `subs_plans` by `appleProductId`.
+4. Creates missing plans with inferred defaults (name/slug/type/interval/order).
+5. Optionally deactivates local Apple-mapped plans missing in Apple list when `IAP_APPLE_CATALOG_SYNC_DEACTIVATE_MISSING=1`.
+
+### Why this helps
+
+- Mobile app no longer depends on manually calling admin catalog APIs after each Apple-side product change.
+- `GET /api/subscription/plans/mobile` stays aligned with App Store catalog automatically.
 
 ## 3.0 Plan Catalog Management (Apple + Google mapping)
 
@@ -123,7 +150,7 @@ Important request field names for this endpoint:
   "displayOrder": 10,
   "isActive": true,
   "isFree": false,
-  "appleProductId": "com.ayniwellness.premium.monthly",
+  "appleProductId": "com.wellness.pro.monthly",
   "googleProductId": "premium_monthly",
   "googleBasePlanId": "monthly"
 }
@@ -146,7 +173,7 @@ Important request field names for this endpoint:
   "displayOrder": 20,
   "isActive": true,
   "isFree": false,
-  "appleProductId": "com.ayniwellness.premium.yearly",
+  "appleProductId": "com.wellness.pro.yearly",
   "googleProductId": "premium_yearly",
   "googleBasePlanId": "yearly"
 }
@@ -239,7 +266,9 @@ Important request field names for this endpoint:
   "productId": "com.ayniwellness.premium.monthly",
   "planId": "<optional_local_subsplan_id>",
   "eventId": "apple-client-verify-001",
-  "eventType": "client.verify.apple"
+  "eventType": "client.verify.apple",
+  "environment": "SANDBOX"
+
 }
 ```
 
