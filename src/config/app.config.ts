@@ -77,11 +77,6 @@ export default () => ({
   },
 
   payment: {
-    stripe: {
-      secret_key: process.env.STRIPE_SECRET_KEY,
-      webhook_secret: process.env.STRIPE_WEBHOOK_SECRET,
-      trialDays: process.env.TRIAL_DAYS,
-    },
     paypal: {
       client_id: process.env.PAYPAL_CLIENT_ID,
       secret: process.env.PAYPAL_SECRET,

@@ -36,7 +36,7 @@ export class SubscriptionSchedulerService {
     const now = new Date();
 
     try {
-      const result = await this.prisma.subscription.updateMany({
+      const expiredTrials = await this.prisma.subscription.findMany({
         where: {
           isActive: true,
           status: SubscriptionStatus.TRIALING,
@@ -46,6 +46,20 @@ export class SubscriptionSchedulerService {
             { endDate: { not: null, lte: now } },
           ],
         },
+        select: { id: true, userId: true },
+      });
+
+      if (!expiredTrials.length) {
+        return;
+      }
+
+      const expiringIds = expiredTrials.map((x) => x.id);
+      const expiringUserIds = Array.from(new Set(expiredTrials.map((x) => x.userId)));
+
+      const result = await this.prisma.subscription.updateMany({
+        where: {
+          id: { in: expiringIds },
+        },
         data: {
           isActive: false,
           status: SubscriptionStatus.EXPIRED,
@@ -53,6 +67,11 @@ export class SubscriptionSchedulerService {
           remainingDays: 0,
           updatedAt: now,
         },
+      });
+
+      await this.prisma.user.updateMany({
+        where: { id: { in: expiringUserIds } },
+        data: { IsSubscriptionActive: false },
       });
 
       if (result.count > 0) {

@@ -3,6 +3,7 @@ import { PrismaModule } from '../../prisma/prisma.module';
 import { IapController } from './iap.controller';
 import { IapEntitlementService } from './iap-entitlement.service';
 import { AppleCatalogSyncService } from './apple-catalog-sync.service';
+import { GoogleCatalogSyncService } from './google-catalog-sync.service';
 import { AppleIapProvider } from './providers/apple-iap.provider';
 import { GoogleIapProvider } from './providers/google-iap.provider';
 import { IapService } from './iap.service';
@@ -16,6 +17,7 @@ import { IapService } from './iap.service';
     GoogleIapProvider,
     IapService,
     AppleCatalogSyncService,
+    GoogleCatalogSyncService,
   ],
   exports: [IapEntitlementService, IapService],
 })

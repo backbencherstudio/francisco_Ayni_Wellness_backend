@@ -13,7 +13,6 @@ import { MailService } from '../../mail/mail.service';
 import { UcodeRepository } from '../../common/repository/ucode/ucode.repository';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { SazedStorage } from '../../common/lib/Disk/SazedStorage';
-import { StripePayment } from '../../common/lib/Payment/stripe/StripePayment';
 import { StringHelper } from '../../common/helper/string.helper';
 
 @Injectable()
@@ -24,48 +23,6 @@ export class AuthService {
     private mailService: MailService,
     @InjectRedis() private readonly redis: Redis,
   ) {}
-
-  private async ensureStripeCustomerAccount(userId: string) {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          billing_id: true,
-          email: true,
-          name: true,
-          first_name: true,
-          last_name: true,
-        },
-      });
-
-      if (!user || user.billing_id) return;
-      if (!user.email) return;
-
-      const resolvedName =
-        user.name ??
-        [user.first_name, user.last_name].filter(Boolean).join(' ').trim() ??
-        user.email;
-
-      const stripeCustomer = await StripePayment.createCustomer({
-        user_id: userId,
-        email: user.email,
-        name: resolvedName,
-      });
-
-      if (stripeCustomer?.id) {
-        await this.prisma.user.update({
-          where: { id: userId },
-          data: { billing_id: stripeCustomer.id },
-        });
-      }
-    } catch (err: any) {
-      // Billing should not block login.
-      console.warn(
-        'Stripe customer creation failed:',
-        err?.message || String(err),
-      );
-    }
-  }
 
   async me(userId: string) {
     try {
@@ -303,9 +260,6 @@ export class AuthService {
         }).catch(() => {});
       }
 
-      // Best-effort: ensure billing account exists (do not block login)
-      await this.ensureStripeCustomerAccount(userId);
-
       // store refreshToken
       await this.redis.set(
         `refresh_token:${user.id}`,
@@ -399,8 +353,6 @@ export class AuthService {
         60 * 60 * 24 * 7,
       );
 
-      await this.ensureStripeCustomerAccount(user.id);
-
       return {
         message: 'Logged in successfully',
         authorization: {
@@ -452,8 +404,6 @@ export class AuthService {
         'EX',
         60 * 60 * 24 * 7,
       );
-
-      await this.ensureStripeCustomerAccount(user.id);
 
       return {
         message: 'Logged in successfully',
@@ -578,24 +528,6 @@ export class AuthService {
           success: false,
           message: 'Failed to create account',
         };
-      }
-
-      // create stripe customer account
-      const stripeCustomer = await StripePayment.createCustomer({
-        user_id: user.data.id,
-        email: email,
-        name: name,
-      });
-
-      if (stripeCustomer) {
-        await this.prisma.user.update({
-          where: {
-            id: user.data.id,
-          },
-          data: {
-            billing_id: stripeCustomer.id,
-          },
-        });
       }
 
       // // Generate verification token
