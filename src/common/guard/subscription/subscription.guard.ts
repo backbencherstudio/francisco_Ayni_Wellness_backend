@@ -42,12 +42,23 @@ export class SubscriptionGuard implements CanActivate {
       where: {
         userId: userId,
         isActive: true,
-        // Status must be active or trialing.
-        status: { in: ['active', 'trialing'] },
         OR: [{ endDate: null }, { endDate: { gt: new Date() } }],
-        plan: {
-          isFree: false,
-        },
+        AND: [
+          {
+            OR: [
+              {
+                status: 'trialing',
+                isTrial: true,
+              },
+              {
+                status: 'active',
+                plan: {
+                  isFree: false,
+                },
+              },
+            ],
+          },
+        ],
       },
       include: {
         plan: true,

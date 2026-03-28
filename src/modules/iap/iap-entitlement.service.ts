@@ -26,16 +26,25 @@ export class IapEntitlementService {
     const isActiveByDate = endDate ? endDate > now : true;
     const isActive = isActiveByStatus && isActiveByDate;
 
-    const type = unifiedStatus === 'trialing' ? SubscriptionPlan.TRIALING : isActive ? SubscriptionPlan.BASIC : SubscriptionPlan.FREE;
+    const isStoreProvider = input.provider === 'APPLE' || input.provider === 'GOOGLE';
+    const effectiveStatus =
+      isStoreProvider && unifiedStatus === 'trialing' ? 'active' : unifiedStatus;
+
+    const type =
+      effectiveStatus === 'trialing'
+        ? SubscriptionPlan.TRIALING
+        : isActive
+          ? SubscriptionPlan.BASIC
+          : SubscriptionPlan.FREE;
 
     return {
       provider: input.provider,
       environment,
-      unifiedStatus,
+      unifiedStatus: effectiveStatus,
       isActive,
       type,
       status: rawStatus || 'unknown',
-      isTrial: unifiedStatus === 'trialing' || !!input.isTrial,
+      isTrial: effectiveStatus === 'trialing' || (!isStoreProvider && !!input.isTrial),
       startDate: input.periodStartAt ?? null,
       endDate,
       trialEndsAt: input.trialEndAt ?? null,
@@ -80,9 +89,6 @@ export class IapEntitlementService {
     if (refundedSet.has(rawStatus)) return 'refunded';
     if (revokedSet.has(rawStatus)) return 'revoked';
     if (canceledSet.has(rawStatus)) {
-      if (provider === 'STRIPE' && meta.cancelAtPeriodEnd && meta.endDate) {
-        return meta.endDate > new Date() ? 'active' : 'canceled';
-      }
       return 'canceled';
     }
     if (expiredSet.has(rawStatus)) return 'expired';

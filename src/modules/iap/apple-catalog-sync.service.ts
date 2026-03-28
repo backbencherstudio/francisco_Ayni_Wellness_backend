@@ -83,6 +83,11 @@ export class AppleCatalogSyncService implements OnModuleInit {
         const productId = item.attributes?.productId?.trim();
         if (!productId) continue;
 
+        // Trial is backend-only. Ignore store trial/free products.
+        if (this.isTrialLikeProduct(productId)) {
+          continue;
+        }
+
         syncedAppleProductIds.push(productId);
 
         const displayName =
@@ -116,7 +121,7 @@ export class AppleCatalogSyncService implements OnModuleInit {
 
         const slug = await this.generateUniqueSlug(productId);
         const inferredType = this.inferType(productId);
-        const inferredIsFree = inferredType === SubscriptionPlan.TRIALING;
+        const inferredIsFree = false;
 
         await this.prisma.subsPlan.create({
           data: {
@@ -130,7 +135,7 @@ export class AppleCatalogSyncService implements OnModuleInit {
             interval: this.inferInterval(productId),
             intervalCount: 1,
             displayOrder: this.inferDisplayOrder(productId),
-            trialDays: inferredIsFree ? this.defaultTrialDays() : 0,
+            trialDays: 0,
           },
         });
         createdCount += 1;
@@ -228,8 +233,13 @@ export class AppleCatalogSyncService implements OnModuleInit {
 
   private inferType(productId: string): SubscriptionPlan {
     const p = productId.toLowerCase();
-    if (p.includes('trial') || p.includes('free')) return SubscriptionPlan.TRIALING;
+    if (p.includes('basic') || p.includes('standard')) return SubscriptionPlan.BASIC;
     return SubscriptionPlan.PREMIUM;
+  }
+
+  private isTrialLikeProduct(productId: string): boolean {
+    const p = productId.toLowerCase();
+    return p.includes('trial') || p.includes('free');
   }
 
   private inferInterval(productId: string): 'MONTH' | 'YEAR' {

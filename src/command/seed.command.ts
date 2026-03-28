@@ -5,6 +5,7 @@ import appConfig from '../config/app.config';
 import { StringHelper } from '../common/helper/string.helper';
 import { UserRepository } from '../common/repository/user/user.repository';
 import { PrismaService } from '../prisma/prisma.service';
+import { SubscriptionPlan } from '@prisma/client';
 
 @Command({ name: 'seed', description: 'prisma db seed' })
 export class SeedCommand extends CommandRunner {
@@ -26,6 +27,7 @@ export class SeedCommand extends CommandRunner {
         await this.permissionSeed();
         await this.userSeed();
         await this.permissionRoleSeed();
+        await this.subscriptionPlansSeed();
       });
 
       console.log('Seeding done.');
@@ -36,19 +38,37 @@ export class SeedCommand extends CommandRunner {
 
   //---- user section ----
   async userSeed() {
-    // system admin, user id: 1
-    const systemUser = await UserRepository.createSuAdminUser({
-      username: appConfig().defaultUser.system.username,
-      email: appConfig().defaultUser.system.email,
-      password: appConfig().defaultUser.system.password,
+    // system admin, create once then reuse on later seed runs
+    const systemEmail = appConfig().defaultUser.system.email;
+    let systemUser = await this.prisma.user.findFirst({
+      where: { email: systemEmail },
+      select: { id: true },
     });
 
-    await this.prisma.roleUser.create({
-      data: {
+    if (!systemUser) {
+      systemUser = await UserRepository.createSuAdminUser({
+        username: appConfig().defaultUser.system.username,
+        email: systemEmail,
+        password: appConfig().defaultUser.system.password,
+      });
+    }
+
+    const existingRoleUser = await this.prisma.roleUser.findFirst({
+      where: {
         user_id: systemUser.id,
         role_id: '1',
       },
+      select: { role_id: true },
     });
+
+    if (!existingRoleUser) {
+      await this.prisma.roleUser.create({
+        data: {
+          user_id: systemUser.id,
+          role_id: '1',
+        },
+      });
+    }
   }
 
   async permissionSeed() {
@@ -102,6 +122,7 @@ export class SeedCommand extends CommandRunner {
 
     await this.prisma.permission.createMany({
       data: permissions,
+      skipDuplicates: true,
     });
   }
 
@@ -122,6 +143,7 @@ export class SeedCommand extends CommandRunner {
     }
     await this.prisma.permissionRole.createMany({
       data: adminPermissionRoleArray,
+      skipDuplicates: true,
     });
     // -----------
 
@@ -141,6 +163,7 @@ export class SeedCommand extends CommandRunner {
     }
     await this.prisma.permissionRole.createMany({
       data: projectAdminPermissionRoleArray,
+      skipDuplicates: true,
     });
     // -----------
 
@@ -166,6 +189,7 @@ export class SeedCommand extends CommandRunner {
     }
     await this.prisma.permissionRole.createMany({
       data: projectManagerPermissionRoleArray,
+      skipDuplicates: true,
     });
     // -----------
 
@@ -190,6 +214,7 @@ export class SeedCommand extends CommandRunner {
     }
     await this.prisma.permissionRole.createMany({
       data: memberPermissionRoleArray,
+      skipDuplicates: true,
     });
     // -----------
 
@@ -212,6 +237,7 @@ export class SeedCommand extends CommandRunner {
     }
     await this.prisma.permissionRole.createMany({
       data: viewerPermissionRoleArray,
+      skipDuplicates: true,
     });
     // -----------
   }
@@ -247,6 +273,163 @@ export class SeedCommand extends CommandRunner {
           name: 'viewer',
         },
       ],
+      skipDuplicates: true,
     });
+  }
+
+  async subscriptionPlansSeed() {
+    await this.trialPlanSeed();
+    await this.monthlyPlanSeed();
+    await this.yearlyPlanSeed();
+  }
+
+  async trialPlanSeed() {
+    const trialDays = Number(process.env.SUBSCRIPTION_TRIAL_DAYS || process.env.TRIAL_DAYS || 14);
+    const normalizedTrialDays = Number.isFinite(trialDays) && trialDays > 0 ? Math.floor(trialDays) : 14;
+    const currency = process.env.SEED_PLAN_CURRENCY || 'USD';
+
+    await this.prisma.subsPlan.upsert({
+      where: { slug: 'free_trial' },
+      update: {
+        name: 'Free Trial',
+        description: `${normalizedTrialDays}-day free trial access`,
+        price_description: `Free for ${normalizedTrialDays} days`,
+        displayOrder: 1,
+        isActive: true,
+        isFree: true,
+        price: 0,
+        currency,
+        interval: 'MONTH' as any,
+        intervalCount: 1,
+        trialDays: normalizedTrialDays,
+        type: SubscriptionPlan.TRIALING,
+        appleProductId: null,
+        googleProductId: null,
+        googleBasePlanId: null,
+        googleOfferId: null,
+      },
+      create: {
+        name: 'Free Trial',
+        slug: 'free_trial',
+        description: `${normalizedTrialDays}-day free trial access`,
+        price_description: `Free for ${normalizedTrialDays} days`,
+        displayOrder: 1,
+        isActive: true,
+        isFree: true,
+        price: 0,
+        currency,
+        interval: 'MONTH' as any,
+        intervalCount: 1,
+        trialDays: normalizedTrialDays,
+        type: SubscriptionPlan.TRIALING,
+        appleProductId: null,
+        googleProductId: null,
+        googleBasePlanId: null,
+        googleOfferId: null,
+      },
+    });
+  }
+
+  async monthlyPlanSeed() {
+    const trialDays = Number(process.env.SEED_MONTHLY_TRIAL_DAYS || 0);
+    const normalizedTrialDays = Number.isFinite(trialDays) && trialDays > 0 ? Math.floor(trialDays) : 0;
+    const price = Number(process.env.SEED_MONTHLY_PRICE || 9.99);
+    const normalizedPrice = Number.isFinite(price) && price >= 0 ? price : 9.99;
+    const currency = process.env.SEED_PLAN_CURRENCY || 'USD';
+
+    await this.prisma.subsPlan.upsert({
+      where: { slug: 'premium_monthly' },
+      update: {
+        name: 'Premium Monthly',
+        description: 'Full access to all premium features (Monthly)',
+        price_description: `${normalizedPrice.toFixed(2)} ${currency} / month`,
+        displayOrder: 10,
+        isActive: true,
+        isFree: false,
+        price: normalizedPrice,
+        currency,
+        interval: 'MONTH' as any,
+        intervalCount: 1,
+        trialDays: normalizedTrialDays,
+        type: SubscriptionPlan.PREMIUM,
+        appleProductId: this.normalizedOptional(process.env.SEED_APPLE_MONTHLY_PRODUCT_ID),
+        googleProductId: this.normalizedOptional(process.env.SEED_GOOGLE_MONTHLY_PRODUCT_ID),
+        googleBasePlanId: this.normalizedOptional(process.env.SEED_GOOGLE_MONTHLY_BASE_PLAN_ID),
+        googleOfferId: this.normalizedOptional(process.env.SEED_GOOGLE_MONTHLY_OFFER_ID),
+      },
+      create: {
+        name: 'Premium Monthly',
+        slug: 'premium_monthly',
+        description: 'Full access to all premium features (Monthly)',
+        price_description: `${normalizedPrice.toFixed(2)} ${currency} / month`,
+        displayOrder: 10,
+        isActive: true,
+        isFree: false,
+        price: normalizedPrice,
+        currency,
+        interval: 'MONTH' as any,
+        intervalCount: 1,
+        trialDays: normalizedTrialDays,
+        type: SubscriptionPlan.PREMIUM,
+        appleProductId: this.normalizedOptional(process.env.SEED_APPLE_MONTHLY_PRODUCT_ID),
+        googleProductId: this.normalizedOptional(process.env.SEED_GOOGLE_MONTHLY_PRODUCT_ID),
+        googleBasePlanId: this.normalizedOptional(process.env.SEED_GOOGLE_MONTHLY_BASE_PLAN_ID),
+        googleOfferId: this.normalizedOptional(process.env.SEED_GOOGLE_MONTHLY_OFFER_ID),
+      },
+    });
+  }
+
+  async yearlyPlanSeed() {
+    const trialDays = Number(process.env.SEED_YEARLY_TRIAL_DAYS || 0);
+    const normalizedTrialDays = Number.isFinite(trialDays) && trialDays > 0 ? Math.floor(trialDays) : 0;
+    const price = Number(process.env.SEED_YEARLY_PRICE || 59.99);
+    const normalizedPrice = Number.isFinite(price) && price >= 0 ? price : 59.99;
+    const currency = process.env.SEED_PLAN_CURRENCY || 'USD';
+
+    await this.prisma.subsPlan.upsert({
+      where: { slug: 'premium_yearly' },
+      update: {
+        name: 'Premium Yearly',
+        description: 'Full access to all premium features (Yearly)',
+        price_description: `${normalizedPrice.toFixed(2)} ${currency} / year`,
+        displayOrder: 20,
+        isActive: true,
+        isFree: false,
+        price: normalizedPrice,
+        currency,
+        interval: 'YEAR' as any,
+        intervalCount: 1,
+        trialDays: normalizedTrialDays,
+        type: SubscriptionPlan.PREMIUM,
+        appleProductId: this.normalizedOptional(process.env.SEED_APPLE_YEARLY_PRODUCT_ID),
+        googleProductId: this.normalizedOptional(process.env.SEED_GOOGLE_YEARLY_PRODUCT_ID),
+        googleBasePlanId: this.normalizedOptional(process.env.SEED_GOOGLE_YEARLY_BASE_PLAN_ID),
+        googleOfferId: this.normalizedOptional(process.env.SEED_GOOGLE_YEARLY_OFFER_ID),
+      },
+      create: {
+        name: 'Premium Yearly',
+        slug: 'premium_yearly',
+        description: 'Full access to all premium features (Yearly)',
+        price_description: `${normalizedPrice.toFixed(2)} ${currency} / year`,
+        displayOrder: 20,
+        isActive: true,
+        isFree: false,
+        price: normalizedPrice,
+        currency,
+        interval: 'YEAR' as any,
+        intervalCount: 1,
+        trialDays: normalizedTrialDays,
+        type: SubscriptionPlan.PREMIUM,
+        appleProductId: this.normalizedOptional(process.env.SEED_APPLE_YEARLY_PRODUCT_ID),
+        googleProductId: this.normalizedOptional(process.env.SEED_GOOGLE_YEARLY_PRODUCT_ID),
+        googleBasePlanId: this.normalizedOptional(process.env.SEED_GOOGLE_YEARLY_BASE_PLAN_ID),
+        googleOfferId: this.normalizedOptional(process.env.SEED_GOOGLE_YEARLY_OFFER_ID),
+      },
+    });
+  }
+
+  private normalizedOptional(value?: string): string | null {
+    const normalized = value?.trim();
+    return normalized ? normalized : null;
   }
 }

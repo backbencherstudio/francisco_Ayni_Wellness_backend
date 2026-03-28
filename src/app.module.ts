@@ -21,7 +21,6 @@ import { MailModule } from './mail/mail.module';
 import { ApplicationModule } from './modules/application/application.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { ChatModule } from './modules/chat/chat.module';
-import { PaymentModule } from './modules/payment/payment.module';
 import { HabitModule } from './modules/habit/habit.module';
 import { InspirationModule } from './modules/inspiration/inspiration.module';
 // import { SubscriptionGuard } from './common/guard/subscription/subscription.guard';
@@ -68,7 +67,6 @@ import { HttpResponseInterceptor } from './common/interceptor/http-response.inte
     ApplicationModule,
     AdminModule,
     ChatModule,
-    PaymentModule,
     HabitModule,
     InspirationModule,
     SubscriptionModule,

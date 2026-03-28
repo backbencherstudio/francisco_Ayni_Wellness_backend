@@ -1,3 +1,4 @@
+import 'dotenv/config';
 // external imports
 import { Module } from '@nestjs/common';
 import { CommandFactory } from 'nest-commander';

@@ -12,6 +12,7 @@ import appConfig from './config/app.config';
 import { CustomExceptionFilter } from './common/exception/custom-exception.filter';
 import { SazedStorage } from './common/lib/Disk/SazedStorage';
 
+
 async function bootstrap() {
   // Auto-detect storage driver: prefer MinIO/AWS S3 when env vars are present.
   const fileSystems: any = appConfig().fileSystems || {};
@@ -108,9 +109,6 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
   });
-
-  // Handle raw body for webhooks
-  app.use(['/api/payment/stripe/webhook', '/payment/stripe/webhook'], express.raw({ type: 'application/json' }));
 
   app.setGlobalPrefix('api', {
     exclude: [
