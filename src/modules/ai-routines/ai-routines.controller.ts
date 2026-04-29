@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Get,
   Param,
@@ -8,10 +9,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { RoutineItemType } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { AiRoutinesService } from './ai-routines.service';
 import { SubscriptionGuard } from '../../common/guard/subscription/subscription.guard';
+import { SkipSubscription } from 'src/common/decorator/skip-subscription.decorator';
 
 @ApiBearerAuth()
 @ApiTags('AI Routines')
@@ -92,8 +95,33 @@ export class AiRoutinesController {
     return this.svc.submitJournal(user.userId, itemId, body.text);
   }
 
+  @SkipSubscription()
   @Get('journal/history')
-  async getJournalHistory(@GetUser() user) {
-    return this.svc.getJournalHistory(user.userId);
+  async getJournalHistory(@GetUser() user, @Query('limit') limit?: string) {
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.svc.getJournalHistory(
+      user.userId,
+      Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+    );
+  }
+  @SkipSubscription()
+  @Get('history/:type')
+  async getHistoryByType(
+    @GetUser() user,
+    @Param('type') type: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!Object.values(RoutineItemType).includes(type as RoutineItemType)) {
+      throw new BadRequestException(
+        `Invalid routine item type. Allowed values: ${Object.values(RoutineItemType).join(', ')}`,
+      );
+    }
+
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.svc.getHistoryByType(
+      user.userId,
+      type as RoutineItemType,
+      Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+    );
   }
 }

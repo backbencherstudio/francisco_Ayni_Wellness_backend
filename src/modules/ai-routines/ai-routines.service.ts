@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FirebaseStorageService } from '../firebase-storage/firebase-storage.service';
 import { NotificationService as AppNotificationService } from '../application/notification/notification.service';
-import { stat } from 'fs';
+import { RoutineItemType } from '@prisma/client';
 
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
@@ -280,6 +280,33 @@ export class AiRoutinesService {
     return { success: true, data: items };
   }
 
+  private async enrichRoutineItemWithAssets(item: any) {
+    if (
+      item.content_type === 'video/youtube' &&
+      item.gcs_path?.startsWith('youtube:')
+    ) {
+      const videoId = item.gcs_path.split(':')[1];
+      return {
+        ...item,
+        signed_url: `https://www.youtube.com/watch?v=${videoId}`,
+        video_id: videoId,
+      };
+    }
+
+    if (item.gcs_path) {
+      const url = await this.gcs
+        .getFileSignedUrl(item.gcs_path)
+        .catch(() => null);
+      return {
+        ...item,
+        signed_url: url?.url || null,
+        url_source: url?.source || null,
+      };
+    }
+
+    return item;
+  }
+
   async getRoutineDetails(
     userId: string,
     routineId: string,
@@ -326,27 +353,7 @@ export class AiRoutinesService {
     }
 
     const items = await Promise.all(
-      routine.items.map(async (it: any) => {
-        if (
-          it.content_type === 'video/youtube' &&
-          it.gcs_path?.startsWith('youtube:')
-        ) {
-          const videoId = it.gcs_path.split(':')[1];
-          return {
-            ...it,
-            signed_url: `https://www.youtube.com/watch?v=${videoId}`,
-            video_id: videoId,
-          };
-        }
-
-        if (it.gcs_path) {
-          const url = await this.gcs
-            .getFileSignedUrl(it.gcs_path)
-            .catch(() => null);
-          return { ...it, signed_url: url?.url || null };
-        }
-        return it;
-      }),
+      routine.items.map((it: any) => this.enrichRoutineItemWithAssets(it)),
     );
     return {
       success: true,
@@ -429,7 +436,10 @@ export class AiRoutinesService {
         },
       });
       if (existingDailyRoutine) {
-        return { success: false, message: 'Mood check already submitted today' };
+        return {
+          success: false,
+          message: 'Mood check already submitted today',
+        };
       }
       return this.generateToday(userId, { moodCheckId: existingMoodCheck.id });
     }
@@ -453,36 +463,7 @@ export class AiRoutinesService {
     const routinesWithAssets = await Promise.all(
       routines.map(async (routine: any) => {
         const items = await Promise.all(
-          routine.items.map(async (it: any) => {
-        // Handle YouTube items
-        if (
-          it.content_type === 'video/youtube' &&
-          it.gcs_path?.startsWith('youtube:')
-        ) {
-          const videoId = it.gcs_path.split(':')[1];
-          return {
-            ...it,
-            url: `https://www.youtube.com/watch?v=${videoId}`,
-            signed_url: `https://www.youtube.com/watch?v=${videoId}`,
-            video_id: videoId,
-          };
-        }
-
-        if (it.gcs_path) {
-          const url = await this.gcs
-            .getFileSignedUrl(it.gcs_path)
-            .catch((e) => {
-              return null;
-            });
-          return {
-            ...it,
-            url: url?.url || null,
-            signed_url: url?.url || null,
-            url_source: url?.source || null,
-          };
-        }
-            return it;
-          }),
+          routine.items.map((it: any) => this.enrichRoutineItemWithAssets(it)),
         );
         return { ...routine, items };
       }),
@@ -527,13 +508,12 @@ export class AiRoutinesService {
     return { success: true, item: updated };
   }
 
-  async getJournalHistory(userId: string, limit = 20) {
+  async getHistoryByType(userId: string, type: RoutineItemType, limit = 20) {
     const items = await this.prisma.routineItem.findMany({
       where: {
         routine: { user_id: userId },
-        type: 'Journaling',
+        type,
         status: 'completed',
-        journal_text: { not: null },
       },
       orderBy: { completed_at: 'desc' },
       take: limit,
@@ -544,17 +524,13 @@ export class AiRoutinesService {
       },
     });
     const itemsWithAssets = await Promise.all(
-      items.map(async (it: any) => {
-        if (it.gcs_path) {
-          const url = await this.gcs
-            .getFileSignedUrl(it.gcs_path)
-            .catch(() => null);
-          return { ...it, signed_url: url?.url || null };
-        }
-        return it;
-      }),
+      items.map((it: any) => this.enrichRoutineItemWithAssets(it)),
     );
     return { success: true, data: itemsWithAssets };
+  }
+
+  async getJournalHistory(userId: string, limit = 20) {
+    return this.getHistoryByType(userId, RoutineItemType.Journaling, limit);
   }
 
   async redoRoutine(
@@ -570,7 +546,8 @@ export class AiRoutinesService {
 
     const tz = await this.getUserTimezone(userId);
     const targetDate = dayjs().tz(tz).startOf('day');
-    const baseDay = body.today === false ? targetDate.add(1, 'day') : targetDate;
+    const baseDay =
+      body.today === false ? targetDate.add(1, 'day') : targetDate;
     const dayStart = baseDay.startOf('day');
     const dayEnd = dayStart.add(1, 'day');
 
