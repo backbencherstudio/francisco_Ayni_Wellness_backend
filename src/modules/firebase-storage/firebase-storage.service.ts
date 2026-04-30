@@ -99,6 +99,27 @@ export class FirebaseStorageService {
     }));
   }
 
+  async readJson(path: string): Promise<any | null> {
+    const bucket = this.storage().bucket(this.bucketName);
+    try {
+      const file = bucket.file(path);
+      const [existsResp] = await file.exists();
+      const exists = Array.isArray(existsResp) ? existsResp[0] : !!existsResp;
+      if (!exists) return null;
+      const [buffer] = await file.download();
+      const text = buffer.toString('utf8');
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        this.logger.warn(`readJson: failed to parse JSON at ${path}: ${e?.message || e}`);
+        return null;
+      }
+    } catch (e) {
+      this.logger.warn(`readJson: failed for ${path}: ${e?.message || e}`);
+      return null;
+    }
+  }
+
   async listTopLevelFolders() {
     const bucket = this.storage().bucket(this.bucketName);
     const [files, _next, apiResponse] = await (bucket as any).getFiles({
