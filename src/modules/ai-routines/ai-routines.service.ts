@@ -114,11 +114,29 @@ export class AiRoutinesService {
     // Journaling (random from 'journaling' folder; fallback to text-only prompt)
     const journaling = await this.pickRandom('journaling');
     if (journaling) {
+      // Try to read JSON payload from the file to extract title/description
+      let jsonMeta: any = null;
+      try {
+        jsonMeta = await this.gcs.readJson(journaling.name);
+      } catch (e) {
+        console.warn('readJson error for', journaling.name, e instanceof Error ? e.message : e);
+      }
+
+      // If jsonMeta is an array, pick a random element
+      if (Array.isArray(jsonMeta) && jsonMeta.length > 0) {
+        const idx = Math.floor(Math.random() * jsonMeta.length);
+        jsonMeta = jsonMeta[idx];
+      }
+
       const meta = journaling?.customMetadata || {};
+      const titleFromJson = jsonMeta?.title || jsonMeta?.prompt_title || jsonMeta?.name;
+      const descFromJson = jsonMeta?.description || jsonMeta?.prompt;
+
       items.push({
         type: 'Journaling',
-        title: meta.title || meta.name || meta.prompt_title || 'Journaling',
-        description: meta.prompt || meta.description,
+        title:
+          titleFromJson || meta.title || meta.name || meta.prompt_title || 'Journaling',
+        description: descFromJson || meta.prompt || meta.description || undefined,
         gcs_path: journaling.name,
         content_type: journaling.contentType || 'text',
         duration_min: this.resolveDurationMinutesFromFile(journaling) ?? 10,
@@ -219,7 +237,14 @@ export class AiRoutinesService {
       // Fetch playlist items (max 50)
       const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${apiKey}`;
 
-      const response = await fetch(url);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      let response: Response;
+      try {
+        response = await fetch(url, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
       const data: any = await response.json();
 
       if (!data.items || data.items.length === 0) return null;
@@ -235,7 +260,8 @@ export class AiRoutinesService {
         description: snippet.description,
       };
     } catch (error) {
-      console.error('Error fetching YouTube playlist:', error);
+      // Gracefully fall back to local podcasts on fetch failure (network issues, timeouts, etc.)
+      console.debug('YouTube playlist fetch unavailable, falling back to local podcasts:', error instanceof Error ? error.message : error);
       return null;
     }
   }
@@ -281,6 +307,11 @@ export class AiRoutinesService {
   }
 
   private async enrichRoutineItemWithAssets(item: any) {
+    // Skip signed URL enrichment for Journaling items
+    if (item.type === 'Journaling') {
+      return item;
+    }
+
     if (
       item.content_type === 'video/youtube' &&
       item.gcs_path?.startsWith('youtube:')
